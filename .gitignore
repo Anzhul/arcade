@@ -1,0 +1,8 @@
+# Ignore .vscode settings
+.vscode/
+
+# Ignore the art folder
+art/
+
+# Ignore node_modules in the site directory
+site/node_modules/
