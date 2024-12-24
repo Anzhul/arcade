@@ -1,0 +1,1 @@
+g++ -o engine engine.cpp -l wiringPi
