@@ -1,3 +1,4 @@
+#ifndef SHIP_HPP
 #define SHIP_HPP
 /* ship.hpp
  *
@@ -10,6 +11,8 @@
 
 #include <string>
 #include <vector>
+#include "led-matrix.h"
+using namespace rgb_matrix;
 
 class Ship {
 public:
@@ -38,8 +41,8 @@ public:
     virtual void move(int x, int y);
 
     //Display
-    virtual void draw();
-    virtual void erase();
+    virtual void draw(RGBMatrix *matrix);
+    virtual void erase(RGBMatrix *matrix);
 
 private:
     int health;
@@ -47,3 +50,5 @@ private:
     int x;
     int y;
 };
+
+#endif

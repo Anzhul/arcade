@@ -1,1 +1,7 @@
-g++ -o engine engine.cpp -l wiringPi
+g++ -o engine engine.cpp ship.cpp -lrgbmatrix -lrt -lm -lpthread -lwiringPi 
+
+ 
+g++ -o all_on all_on.cpp -I/home/anzhu/rpi-rgb-led-matrix/include -L/home/anzhu/rpi-rgb-led-matrix/lib -lrgbmatrix -lrt -lm -lpthread
+
+
+g++ -o test test.cpp ship.cpp -lwiringPi -lrgbmatrix -lrt -lm -lpthread 

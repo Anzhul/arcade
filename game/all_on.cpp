@@ -40,7 +40,7 @@ int main() {
 
     // Fill the entire matrix with the color
     for (int row = 0; row < 64; ++row) {
-        for (int col = 0; col < 32; ++col) {
+        for (int col = 0; col < 64; ++col) {
             matrix->SetPixel(col, row, color.r, color.g, color.b);
         }
     }
