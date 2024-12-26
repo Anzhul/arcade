@@ -4,6 +4,7 @@
 #include "graphics.h"
 #include <csignal>
 #include "ship.hpp"
+#include "game.hpp"
 #include <wiringPi.h> // Include WiringPi library!
 #include <wiringPiI2C.h>
 #include <unistd.h> // Needed for sleep
@@ -14,6 +15,10 @@ using namespace std;
 #define CHANNEL_1 0xC4 // Single-ended CH1
 #define CHANNEL_2 0x94 // Single-ended CH2
 #define CHANNEL_3 0xD4 // Single-ended CH3
+#define CHANNEL_4 0xA4 // Single-ended CH4
+#define CHANNEL_5 0xE4 // Single-ended CH5
+#define CHANNEL_6 0xB4 // Single-ended CH6
+#define CHANNEL_7 0xF4 // Single-ended CH7
 
 using namespace rgb_matrix;
 
@@ -64,7 +69,7 @@ int main(void)
   matrix_options.cols = 64;
   matrix_options.chain_length = 1;
   matrix_options.parallel = 1;
-  matrix_options.brightness = 75;
+  //matrix_options.brightness = 75;
   matrix_options.hardware_mapping = "adafruit-hat";
 
   RuntimeOptions runtime_options;
@@ -87,26 +92,36 @@ int main(void)
     }
   }
 
-  Ship player;
-  Ship Ship(100, 1, 64 / 2, 0);
+  Game game = Game();
+  game.setup();
+
+  for (int row = 0; row < 64; ++row){
+    for (int col = 0; col < 64; ++col){
+      matrix->SetPixel(col, row, 18, 10, 14);
+    }
+  }
+
+  int clock = 0;
 
   while (!interrupt_received){
-    int xValue = readADC(0x84, adc); // Read X-axis (Channel 0)
-    int yValue = readADC(0xC4, adc); // Read Y-axis (Channel 1)
-    int pValue = readADC(0x94, adc); // Read P-meter (Channel 2)
-
+    int xValue = readADC(CHANNEL_0, adc); // Read X-axis (Channel 0)
+    int yValue = readADC(CHANNEL_1, adc); // Read Y-axis (Channel 1)
+    int pValue = readADC(CHANNEL_2, adc); // Read P-meter (Channel 2)
+    int button1 = readADC(CHANNEL_3, adc); // Read BUtton1 (Channel 3)
+    int button2 = readADC(CHANNEL_5, adc); // Read BUtton2 (Channel 4)
+    int button3 = readADC(CHANNEL_7, adc); // Read BUtton3 (Channel 5)
+    /*
     std::cout << "Joystick X: " << xValue << ", Y: " << yValue
-              << ", Pmeter" << pValue << std::endl;
+              << ", Pmeter: " << pValue << ", Button1: " << button1 <<
+              ", Button2: " << button2 << ", BUtton3: " << button3 <<std::endl;
+    */
 
-    for (int row = 0; row < 64; ++row){
-      for (int col = 0; col < 64; ++col){
-        matrix->SetPixel(col, row, xValue, 150, yValue);
-      }
-    }
+    game.update(xValue, yValue, pValue, button1, button2, button3, matrix, clock);
 
-    usleep(1000); // Sleep for 100ms (adjust as necessary)
+    usleep(100); // Sleep for 100ms (adjust as necessary)
+    ++clock;
   }
-  // matrix->Clear();
-  // delete matrix;
+  matrix->Clear();
+  delete matrix;
   return 0;
 }

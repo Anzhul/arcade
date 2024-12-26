@@ -1,5 +1,5 @@
-#ifndef SHIP_HPP
-#define SHIP_HPP
+#ifndef ALIEN_HPP
+#define ALIEN_HPP
 /* ship.hpp
  *
  * PLayer ship interface
@@ -11,41 +11,38 @@
 
 #include <string>
 #include <vector>
-#include <iostream>
 #include "led-matrix.h"
 using namespace rgb_matrix;
 
-class Ship {
+class Alien{
 public:
-    Ship();
-    Ship(int health, int speed, int x, int y);
-    ~Ship();
+    Alien();
+    Alien(int health, int speed, int x, int y);
+    ~Alien();
 
-    //Getters
+        //Getters
 
     virtual const int get_health();
     virtual const int get_speed();
     virtual const int get_x();
     virtual const int get_y();
 
-    //Setters
+        //Setters
 
     virtual void setHealth(int health);
     virtual void setSpeed(int speed);
     virtual void setX(int x);
     virtual void setY(int y);
 
-    //Actions
+        //Actions
 
     virtual void takeDamage(int damage);
-    virtual void fire(int button1, int button2, int button3);
-    virtual void move(int x, int y, int clock);
+    virtual void fire();
+    virtual void move(int x, int y);
 
     //Display
     virtual void draw(RGBMatrix *matrix);
     virtual void erase(RGBMatrix *matrix);
-    virtual void effects(int x, int y, int clock, RGBMatrix *matrix);
-
 private:
     int health;
     int speed;
