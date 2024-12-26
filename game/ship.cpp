@@ -59,13 +59,15 @@ void Ship::takeDamage(int damage)
     health -= damage;
 }
 
-void Ship::fire(int button1, int button2, int button3)
+void Ship::fire(int button1, int button2, int button3, int clock)
 {
-    if (button1 == 0)
+    //fire red laser
+    if (button2 == 0 && (clock-cooldown2) >= 200)
     {
         cout << "pew pew" << endl;
+        cooldown2 = clock;
     }
-    // cout << "pew pew" << endl;
+    
 }
 
 void Ship::move(int x, int y, int clock)

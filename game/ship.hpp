@@ -38,7 +38,7 @@ public:
     //Actions
 
     virtual void takeDamage(int damage);
-    virtual void fire(int button1, int button2, int button3);
+    virtual void fire(int button1, int button2, int button3, int clock);
     virtual void move(int x, int y, int clock);
 
     //Display
@@ -51,6 +51,9 @@ private:
     int speed;
     int x;
     int y;
+    int cooldown2;
+    int cooldown3;
+    int fire_rate;
 };
 
 #endif
