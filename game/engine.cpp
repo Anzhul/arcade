@@ -1,5 +1,6 @@
 
 #include <iostream>
+#include <mqtt/async_client.h>
 #include "led-matrix.h"
 #include "graphics.h"
 #include <csignal>
@@ -10,6 +11,10 @@
 #include <unistd.h> // Needed for sleep
 #include <math.h>
 using namespace std;
+
+const std::string SERVER_ADDRESS = "tcp://localhost:1883"; // Broker address
+const std::string CLIENT_ID = "RaspberryPiClient";
+const std::string TOPIC = "test/topic";
 
 #define CHANNEL_0 0x84 // Single-ended CH0
 #define CHANNEL_1 0xC4 // Single-ended CH1
