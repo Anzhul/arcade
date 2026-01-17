@@ -1,4 +1,4 @@
-g++ -o engine engine.cpp ship.cpp game.cpp -lrgbmatrix -lrt -lm -lpthread -lwiringPi 
+g++ -o engine engine.cpp bullet.cpp ship.cpp game.cpp -lrgbmatrix -lrt -lm -lpthread -lwiringPi 
 sudo ./engine
 
  

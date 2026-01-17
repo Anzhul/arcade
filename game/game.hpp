@@ -3,15 +3,17 @@
 #include "ship.hpp"
 #include "alien.hpp"
 #include "led-matrix.h"
+#include "input.hpp"
 using namespace rgb_matrix;
 
 class Game{
 public:
     Game();
     ~Game();
-    void update(int x, int y, int potentiometer, bool button1, bool button2, bool button3, RGBMatrix *matrix, int clock);
+    void update(const InputState& input, RGBMatrix *matrix, int clock);
     void setup();
 private:
+    void drawHUD(RGBMatrix *matrix, int potentiometer);
     Ship player;
     //Alien hostile_aliens[];
     //Hostile_ship hostile_ships[];
