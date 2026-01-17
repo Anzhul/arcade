@@ -1,4 +1,4 @@
- /*
+  /*
  * Adafruit Feather M0 WiFi (ATWINC1500) Input Controller
  *
  * Hardware Setup:
@@ -17,6 +17,13 @@
 
 #include <WiFi101.h>
 #include <WiFiUdp.h>
+
+// ===== WiFi Pin Configuration for M0 WiFi =====
+// Manually define pins for ATWINC1500 (CS, IRQ, RST, EN)
+#define WINC_CS   8
+#define WINC_IRQ  7
+#define WINC_RST  4
+#define WINC_EN   2
 
 // ===== WiFi Configuration =====
 const char* ssid = "Ling";          // Replace with your WiFi network name
@@ -52,6 +59,13 @@ struct SensorData {
 SensorData currentData;
 SensorData previousData;
 
+// ===== Calibration Settings =====
+const int JOY_CENTER_X = 810;        // Joystick X center value (measured at rest)
+const int JOY_CENTER_Y = 813;        // Joystick Y center value (measured at rest)
+const int JOY_DEADZONE = 50;         // Ignore values within this range of center
+const int JOY_MIN = 0;               // Minimum ADC value
+const int JOY_MAX = 1023;            // Maximum ADC value
+
 // ===== Settings =====
 const int SEND_INTERVAL = 20;        // Send data every 20ms (50Hz)
 const int DEBOUNCE_DELAY = 50;       // Button debounce time in milliseconds
@@ -67,7 +81,7 @@ void setupWiFi();
 void readSensors();
 void sendData();
 bool dataChanged();
-int mapAnalog(int value);
+int normalizeJoystick(int value, int center);
 
 void setup() {
   Serial.begin(115200);
@@ -110,6 +124,9 @@ void loop() {
 }
 
 void setupWiFi() {
+  // Manually set WiFi pins for ATWINC1500
+  WiFi.setPins(WINC_CS, WINC_IRQ, WINC_RST, WINC_EN);
+
   // Check for the WiFi module
   if (WiFi.status() == WL_NO_SHIELD) {
     Serial.println("WiFi module not detected!");
@@ -145,11 +162,16 @@ void setupWiFi() {
 }
 
 void readSensors() {
-  // Read analog inputs (10-bit ADC: 0-1023 on M0)
-  currentData.joystickX = analogRead(JOYSTICK_X_PIN);
-  currentData.joystickY = analogRead(JOYSTICK_Y_PIN);
-  currentData.pot1 = analogRead(POT1_PIN);
-  currentData.pot2 = analogRead(POT2_PIN);
+  // Read analog inputs (10-bit ADC: 0-1023 on M0) and normalize joystick
+  int rawX = analogRead(JOYSTICK_X_PIN);
+  int rawY = analogRead(JOYSTICK_Y_PIN);
+
+  currentData.joystickX = normalizeJoystick(rawX, JOY_CENTER_X);
+  currentData.joystickY = normalizeJoystick(rawY, JOY_CENTER_Y);
+
+  // Read potentiometers (map to 0-100 range for consistency)
+  currentData.pot1 = map(analogRead(POT1_PIN), 0, 1023, 0, 100);
+  currentData.pot2 = map(analogRead(POT2_PIN), 0, 1023, 0, 100);
 
   // Read buttons with debouncing
   int buttonPins[3] = {BUTTON1_PIN, BUTTON2_PIN, BUTTON3_PIN};
@@ -219,5 +241,29 @@ void sendData() {
     Serial.println("WiFi disconnected!");
     // Note: WiFi101 doesn't support auto-reconnect
     // You may need to restart the board if connection is lost
+  }
+}
+
+// Normalize joystick values to -100 to +100 range with deadzone
+int normalizeJoystick(int value, int center) {
+  // Calculate distance from center
+  int offset = value - center;
+
+  // Apply deadzone - treat values near center as zero
+  if (abs(offset) < JOY_DEADZONE) {
+    return 0;
+  }
+
+  // Determine if we're in positive or negative range
+  if (offset > 0) {
+    // Positive direction (center to max)
+    int range = JOY_MAX - center;
+    // Map from (deadzone to range) to (0 to 100)
+    return map(offset, JOY_DEADZONE, range, 0, 100);
+  } else {
+    // Negative direction (center to min)
+    int range = center - JOY_MIN;
+    // Map from (-range to -deadzone) to (-100 to 0)
+    return map(offset, -range, -JOY_DEADZONE, -100, 0);
   }
 }
