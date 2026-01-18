@@ -52,6 +52,9 @@ public:
     virtual void eraseBullets(RGBMatrix *matrix);
     virtual void updateDistribution(int potentiometer);  // 0-100: 0=max shield, 100=max speed
     virtual void regenerateShield(int clock);
+    virtual void dash(int joystickX, int joystickY, bool button1, int clock, RGBMatrix *matrix);
+    virtual void updateDashTrail(int clock, RGBMatrix *matrix);
+    virtual void eraseDashTrail(RGBMatrix *matrix);
 
     //Display
     virtual void draw(RGBMatrix *matrix);
@@ -76,6 +79,13 @@ private:
     int cooldown3;
     int fire_rate;
     int lastShieldRegen;  // Clock time of last shield regen
+    int dashCooldown;     // Clock time of last dash
+    int dashTrailX[5];    // Trail ship positions (up to 5 ghost ships)
+    int dashTrailY[5];
+    int dashTrailCount;   // Number of trail positions
+    int dashTrailStart;   // Clock time when trail started
+    void drawShipAt(int posX, int posY, float opacity, RGBMatrix *matrix);
+    void eraseShipAt(int posX, int posY, RGBMatrix *matrix);
     Bullet bullets[MAX_BULLETS];
 };
 

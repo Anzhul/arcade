@@ -23,6 +23,8 @@ void Game::update(const InputState& input, RGBMatrix *matrix, int clock) {
 
     // Update positions
     player.move(input.joystick_x, input.joystick_y, clock);
+    player.dash(input.joystick_x, input.joystick_y, input.button1, clock, matrix);
+    player.updateDashTrail(clock, matrix);
     player.fire(input.button1, input.button2, input.button3, clock);
     player.updateBullets();
 

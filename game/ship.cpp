@@ -1,5 +1,6 @@
 
 #include "ship.hpp"
+#include <tuple>
 using namespace std;
 
 Ship::Ship()
@@ -16,8 +17,11 @@ Ship::Ship()
     cooldown1 = 0;
     cooldown2 = 0;
     cooldown3 = 0;
-    fire_rate = 10;
+    fire_rate = 5;
     lastShieldRegen = 0;
+    dashCooldown = 0;
+    dashTrailCount = 0;
+    dashTrailStart = 0;
 }
 
 Ship::Ship(int health, int speed, int x, int y) : health(health), speed(speed), x(x), y(y) {}
@@ -113,7 +117,7 @@ void Ship::fire(bool button1, bool button2, bool button3, int clock)
             if (!bullets[i].isActive())
             {
                 // Create bullet at ship center, moving up (negative y direction)
-                bullets[i] = Bullet(x, y - 2, 0, -2, 255, 50, 50);  // Red bullet
+                bullets[i] = Bullet(x, y - 2, 0, -2, 255, 150, 50);  // Red bullet
                 cooldown2 = clock;
                 break;
             }
@@ -123,8 +127,8 @@ void Ship::fire(bool button1, bool button2, bool button3, int clock)
 
 void Ship::updateDistribution(int potentiometer)
 {
-    // potentiometer 0-100: 0 = max shield (100), min speed (5 = 0.5x)
-    //                    100 = no shield (0), max speed (30 = 3.0x)
+    // potentiometer 0-100: 0 = max shield (100), slow fire rate
+    //                    100 = no shield (0), fast fire rate
 
     // Calculate new max shield (100 at pot=0, 0 at pot=100)
     maxShield = 100 - potentiometer;
@@ -146,22 +150,26 @@ void Ship::updateDistribution(int potentiometer)
         shieldActive = true;
     }
 
-    // Calculate speed: 10 at pot=0 (1.0x), 30 at pot=100 (3.0x)
-    // Linear interpolation: 10 + (potentiometer * 20) / 100
-    speed = 10 + (potentiometer * 20) / 100;
+    // Speed is constant at 1.0x
+    speed = 10;
+
+    // Calculate fire_rate: 20 at pot=0 (slow), 3 at pot=100 (fast)
+    // Linear interpolation: 20 - (potentiometer * 17) / 100
+    fire_rate = 20 - (potentiometer * 17) / 100;
 }
 
 void Ship::regenerateShield(int clock)
 {
     // Regenerate 10 shield per interval
-    // Base interval: 0.25s per shield bar (25 ticks per bar at 100fps)
-    // 10 bars = 2.5s, 5 bars = 1.25s, 1 bar = 0.25s
+    // More shield capacity = faster regen
+    // 10 bars: 0.25s (25 ticks), 5 bars: 0.5s (50 ticks), 1 bar: 2.5s (250 ticks)
     const int REGEN_AMOUNT = 10;
     int shieldBars = maxShield / 10;  // Number of shield bars (0-10)
-    int regenInterval = shieldBars * 25;  // 0.25s per bar
+    if (shieldBars == 0) return;
 
-    if (maxShield > 0 && shield < maxShield && regenInterval > 0 &&
-        (clock - lastShieldRegen) >= regenInterval)
+    int regenInterval = 250 / shieldBars;  // Inverse: more bars = faster
+
+    if (shield < maxShield && (clock - lastShieldRegen) >= regenInterval)
     {
         shield += REGEN_AMOUNT;
         if (shield > maxShield)
@@ -170,6 +178,169 @@ void Ship::regenerateShield(int clock)
         }
         lastShieldRegen = clock;
     }
+}
+
+void Ship::dash(int joystickX, int joystickY, bool button1, int clock, RGBMatrix *matrix)
+{
+    const int DASH_COOLDOWN = 50;  // 0.5 second at 100fps
+    const int DASH_DISTANCE = 10;
+    const int deadzone = 5;
+
+    if (!button1 || (clock - dashCooldown) < DASH_COOLDOWN)
+    {
+        return;
+    }
+
+    // Check if joystick is in a direction
+    bool hasDirection = (joystickX > deadzone || joystickX < -deadzone ||
+                         joystickY > deadzone || joystickY < -deadzone);
+
+    if (!hasDirection)
+    {
+        return;  // No direction, stay stationary
+    }
+
+    // Store starting position for trail
+    int startX = x;
+    int startY = y;
+
+    // Calculate dash direction and apply
+    int dirX = 0, dirY = 0;
+    if (joystickY > deadzone)
+    {
+        dirY = 1;
+        y += DASH_DISTANCE;
+        if (y > 64) y = 64;
+    }
+    else if (joystickY < -deadzone)
+    {
+        dirY = -1;
+        y -= DASH_DISTANCE;
+        if (y < 0) y = 0;
+    }
+
+    if (joystickX > deadzone)
+    {
+        dirX = -1;
+        x -= DASH_DISTANCE;
+    }
+    else if (joystickX < -deadzone)
+    {
+        dirX = 1;
+        x += DASH_DISTANCE;
+    }
+
+    // Create ghost ship trail positions (every 2 pixels along the path)
+    dashTrailCount = 0;
+    int trailX = startX;
+    int trailY = startY;
+    for (int i = 2; i < DASH_DISTANCE && dashTrailCount < 5; i += 2)
+    {
+        trailX = startX + dirX * i;
+        trailY = startY + dirY * i;
+        dashTrailX[dashTrailCount] = trailX;
+        dashTrailY[dashTrailCount] = trailY;
+        // Draw faded ship at this position (opacity decreases along trail)
+        float opacity = 0.3f - (dashTrailCount * 0.05f);
+        drawShipAt(trailX, trailY, opacity, matrix);
+        dashTrailCount++;
+    }
+    dashTrailStart = clock;
+
+    dashCooldown = clock;
+}
+
+void Ship::updateDashTrail(int clock, RGBMatrix *matrix)
+{
+    const int TRAIL_DURATION = 2;  // 20ms at 100fps = 2 ticks
+
+    if (dashTrailCount > 0 && (clock - dashTrailStart) >= TRAIL_DURATION)
+    {
+        // Erase trail
+        eraseDashTrail(matrix);
+        dashTrailCount = 0;
+    }
+}
+
+void Ship::eraseDashTrail(RGBMatrix *matrix)
+{
+    for (int i = 0; i < dashTrailCount; i++)
+    {
+        eraseShipAt(dashTrailX[i], dashTrailY[i], matrix);
+    }
+}
+
+void Ship::drawShipAt(int posX, int posY, float opacity, RGBMatrix *matrix)
+{
+    // Background color for blending
+    const int bgR = 18, bgG = 10, bgB = 14;
+
+    // Helper lambda to blend color with background
+    auto blend = [&](int r, int g, int b) -> std::tuple<int, int, int> {
+        return {
+            (int)(bgR + (r - bgR) * opacity),
+            (int)(bgG + (g - bgG) * opacity),
+            (int)(bgB + (b - bgB) * opacity)
+        };
+    };
+
+    auto [r1, g1, b1] = blend(99, 154, 205);   // Blue cockpit
+    auto [r2, g2, b2] = blend(200, 200, 185);  // Body
+    auto [r3, g3, b3] = blend(132, 132, 132);  // Gray
+    auto [r4, g4, b4] = blend(238, 141, 105);  // Orange
+    auto [r5, g5, b5] = blend(122, 109, 103);  // Brown
+    auto [r6, g6, b6] = blend(83, 75, 71);     // Dark
+    auto [r7, g7, b7] = blend(200, 200, 200);  // Light
+
+    matrix->SetPixel(posY, posX, r1, g1, b1);
+    matrix->SetPixel(posY, posX + 1, r2, g2, b2);
+    matrix->SetPixel(posY, posX + 2, r2, g2, b2);
+    matrix->SetPixel(posY, posX - 1, r2, g2, b2);
+    matrix->SetPixel(posY, posX - 2, r2, g2, b2);
+    matrix->SetPixel(posY + 1, posX, r2, g2, b2);
+    matrix->SetPixel(posY - 1, posX, r2, g2, b2);
+    matrix->SetPixel(posY - 1, posX + 1, r2, g2, b2);
+    matrix->SetPixel(posY - 1, posX - 1, r2, g2, b2);
+    matrix->SetPixel(posY - 2, posX, r1, g1, b1);
+    matrix->SetPixel(posY + 2, posX, r7, g7, b7);
+    matrix->SetPixel(posY + 1, posX + 1, r3, g3, b3);
+    matrix->SetPixel(posY + 1, posX - 1, r3, g3, b3);
+    matrix->SetPixel(posY + 1, posX + 2, r4, g4, b4);
+    matrix->SetPixel(posY + 1, posX - 2, r4, g4, b4);
+    matrix->SetPixel(posY + 1, posX + 3, r2, g2, b2);
+    matrix->SetPixel(posY + 1, posX - 3, r2, g2, b2);
+    matrix->SetPixel(posY + 2, posX + 1, r3, g3, b3);
+    matrix->SetPixel(posY + 2, posX - 1, r3, g3, b3);
+    matrix->SetPixel(posY + 2, posX, r5, g5, b5);
+    matrix->SetPixel(posY + 3, posX + 1, r6, g6, b6);
+    matrix->SetPixel(posY + 3, posX - 1, r6, g6, b6);
+}
+
+void Ship::eraseShipAt(int posX, int posY, RGBMatrix *matrix)
+{
+    const int r = 18, g = 10, b = 14;  // Background color
+    matrix->SetPixel(posY, posX, r, g, b);
+    matrix->SetPixel(posY, posX + 1, r, g, b);
+    matrix->SetPixel(posY, posX + 2, r, g, b);
+    matrix->SetPixel(posY, posX - 1, r, g, b);
+    matrix->SetPixel(posY, posX - 2, r, g, b);
+    matrix->SetPixel(posY + 1, posX, r, g, b);
+    matrix->SetPixel(posY - 1, posX, r, g, b);
+    matrix->SetPixel(posY - 1, posX + 1, r, g, b);
+    matrix->SetPixel(posY - 1, posX - 1, r, g, b);
+    matrix->SetPixel(posY - 2, posX, r, g, b);
+    matrix->SetPixel(posY + 2, posX, r, g, b);
+    matrix->SetPixel(posY + 1, posX + 1, r, g, b);
+    matrix->SetPixel(posY + 1, posX - 1, r, g, b);
+    matrix->SetPixel(posY + 1, posX + 2, r, g, b);
+    matrix->SetPixel(posY + 1, posX - 2, r, g, b);
+    matrix->SetPixel(posY + 1, posX + 3, r, g, b);
+    matrix->SetPixel(posY + 1, posX - 3, r, g, b);
+    matrix->SetPixel(posY + 2, posX + 1, r, g, b);
+    matrix->SetPixel(posY + 2, posX - 1, r, g, b);
+    matrix->SetPixel(posY + 2, posX, r, g, b);
+    matrix->SetPixel(posY + 3, posX + 1, r, g, b);
+    matrix->SetPixel(posY + 3, posX - 1, r, g, b);
 }
 
 void Ship::updateBullets()
