@@ -4,7 +4,8 @@
 struct InputState {
     int joystick_x;      // -100 to 100 (0 = center)
     int joystick_y;      // -100 to 100 (0 = center)
-    int potentiometer;   // 0-100 range
+    int potentiometer;   // 0-100 range (pot1: shield/firerate)
+    int potentiometer2;  // 0-100 range (pot2: weapon mode)
     bool button1;
     bool button2;
     bool button3;

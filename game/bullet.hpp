@@ -19,11 +19,15 @@ public:
     int getX() const { return x; }
     int getY() const { return y; }
 
+    void setLarge(bool large) { isLarge = large; }
+    bool getLarge() const { return isLarge; }
+
 private:
     int x, y;       // Position
     int dx, dy;     // Direction/velocity
     int r, g, b;    // Color
     bool active;
+    bool isLarge;   // Large bullet (2x2)
 };
 
 #endif

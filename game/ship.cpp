@@ -22,6 +22,17 @@ Ship::Ship()
     dashCooldown = 0;
     dashTrailCount = 0;
     dashTrailStart = 0;
+    weaponMode = 0;
+    laserCharging = 0;
+    laserActive = 0;
+    laserStartTick = 0;
+    lastLaserY = 0;
+    lastLaserX = 0;
+    shieldBubbleActive = 0;
+    shieldBubbleStart = 0;
+    shieldBubbleCooldown = 0;
+    lastBubbleX = 0;
+    lastBubbleY = 0;
 }
 
 Ship::Ship(int health, int speed, int x, int y) : health(health), speed(speed), x(x), y(y) {}
@@ -106,22 +117,159 @@ void Ship::takeDamage(int damage)
     }
 }
 
-void Ship::fire(bool button1, bool button2, bool button3, int clock)
+void Ship::fire(bool button1, bool button2, bool button3, int clock, RGBMatrix *matrix)
 {
-    // Fire bullet when button2 is pressed and cooldown has passed
-    if (button2 && (clock - cooldown2) >= fire_rate)
+    if (weaponMode == 0)
     {
-        // Find an inactive bullet slot
-        for (int i = 0; i < MAX_BULLETS; i++)
+        // Mode 0: Normal single bullet (pot2 0-32)
+        // Faster fire rate: fire_rate ranges 10-2 (half of base)
+        int mode0_rate = fire_rate / 2;
+        if (mode0_rate < 2) mode0_rate = 2;
+        if (button2 && (clock - cooldown2) >= mode0_rate)
         {
-            if (!bullets[i].isActive())
+            for (int i = 0; i < MAX_BULLETS; i++)
             {
-                // Create bullet at ship center, moving up (negative y direction)
-                bullets[i] = Bullet(x, y - 2, 0, -2, 255, 150, 50);  // Red bullet
-                cooldown2 = clock;
-                break;
+                if (!bullets[i].isActive())
+                {
+                    bullets[i] = Bullet(x, y - 2, 0, -2, 255, 150, 50);
+                    cooldown2 = clock;
+                    break;
+                }
             }
         }
+    }
+    else if (weaponMode == 1)
+    {
+        // Mode 1: Dual large shot (pot2 33-65)
+        // Fixed fire rate of 45 ticks
+        int mode1_rate = 45;
+        if (button2 && (clock - cooldown2) >= mode1_rate)
+        {
+            int bulletsCreated = 0;
+            for (int i = 0; i < MAX_BULLETS && bulletsCreated < 2; i++)
+            {
+                if (!bullets[i].isActive())
+                {
+                    // Offset 1 pixel from center, larger bullets (2x2)
+                    int offsetX = (bulletsCreated == 0) ? -1 : 1;
+                    bullets[i] = Bullet(x + offsetX, y - 2, 0, -1, 255, 100, 100);  // Slower, red
+                    bullets[i].setLarge(true);  // Mark as large bullet
+                    bulletsCreated++;
+                }
+            }
+            cooldown2 = clock;
+        }
+    }
+    else if (weaponMode == 2)
+    {
+        // Mode 2: Charging laser (pot2 66-99)
+        // Fixed charge time of 45 ticks
+        int chargeTime = 45;
+
+        if (button2)
+        {
+            if (laserActive == 0)
+            {
+                // Charging phase - show flashing dot
+                laserCharging++;
+
+                // Erase previous charging dot position if ship moved
+                if (lastLaserX != x || lastLaserY != y)
+                {
+                    matrix->SetPixel(lastLaserY - 4, lastLaserX, 18, 10, 14);
+                }
+                lastLaserX = x;
+                lastLaserY = y;
+
+                // Flash the charging dot (on every other 5 ticks)
+                if ((laserCharging / 5) % 2 == 0)
+                {
+                    matrix->SetPixel(y - 4, x, 50, 200, 255);  // Bright cyan
+                }
+                else
+                {
+                    matrix->SetPixel(y - 4, x, 18, 10, 14);    // Off (background)
+                }
+
+                if (laserCharging >= chargeTime)
+                {
+                    // Fire laser
+                    laserActive = 30;  // Laser lasts 30 ticks
+                    laserStartTick = clock;
+                    laserCharging = 0;
+                }
+            }
+
+            // If laser is active, update its position to follow ship
+            if (laserActive > 0)
+            {
+                // Erase previous laser position
+                if (lastLaserX != x || lastLaserY != y)
+                {
+                    for (int ly = lastLaserY - 4; ly >= 0; ly--)
+                    {
+                        matrix->SetPixel(ly, lastLaserX, 18, 10, 14);
+                    }
+                }
+
+                // Draw laser at current position (starts 2 pixels in front of ship)
+                lastLaserX = x;
+                lastLaserY = y;
+                for (int ly = y - 4; ly >= 0; ly--)
+                {
+                    matrix->SetPixel(ly, x, 50, 200, 255);
+                }
+            }
+        }
+        else
+        {
+            // Button released, reset charging and deactivate laser
+            if (laserCharging > 0)
+            {
+                // Erase charging dot
+                matrix->SetPixel(lastLaserY - 4, lastLaserX, 18, 10, 14);
+            }
+            laserCharging = 0;
+            if (laserActive > 0)
+            {
+                eraseLaser(matrix);
+                laserActive = 0;
+            }
+        }
+    }
+}
+
+void Ship::updateWeaponMode(int pot2)
+{
+    if (pot2 <= 32)
+    {
+        weaponMode = 0;  // Normal
+    }
+    else if (pot2 <= 65)
+    {
+        weaponMode = 1;  // Dual shot
+    }
+    else
+    {
+        weaponMode = 2;  // Laser
+    }
+}
+
+void Ship::updateLaser(int clock, RGBMatrix *matrix)
+{
+    if (laserActive > 0 && (clock - laserStartTick) >= 30)
+    {
+        // Laser duration expired, erase it
+        eraseLaser(matrix);
+        laserActive = 0;
+    }
+}
+
+void Ship::eraseLaser(RGBMatrix *matrix)
+{
+    for (int ly = lastLaserY - 4; ly >= 0; ly--)
+    {
+        matrix->SetPixel(ly, lastLaserX, 18, 10, 14);  // Background color
     }
 }
 
@@ -182,7 +330,7 @@ void Ship::regenerateShield(int clock)
 
 void Ship::dash(int joystickX, int joystickY, bool button1, int clock, RGBMatrix *matrix)
 {
-    const int DASH_COOLDOWN = 50;  // 0.5 second at 100fps
+    const int DASH_COOLDOWN = 20;  // 0.5 second at 100fps
     const int DASH_DISTANCE = 10;
     const int deadzone = 5;
 
@@ -516,6 +664,142 @@ void Ship::effects(int x, int y, int clock, RGBMatrix *matrix)
     else if (this->x-3 > 64){
         this->x = -3;
     }
+}
+
+void Ship::activateShieldBubble(bool button3, int clock, RGBMatrix *matrix)
+{
+    const int BUBBLE_COOLDOWN = 45;
+    const int BUBBLE_DURATION = 30;  // How long the bubble lasts
+
+    if (button3 && shieldBubbleActive == 0 && (clock - shieldBubbleCooldown) >= BUBBLE_COOLDOWN)
+    {
+        // Activate shield bubble
+        shieldBubbleActive = BUBBLE_DURATION;
+        shieldBubbleStart = clock;
+        shieldBubbleCooldown = clock;
+        lastBubbleX = x;
+        lastBubbleY = y;
+        drawShieldBubble(matrix);
+    }
+}
+
+void Ship::updateShieldBubble(int clock, RGBMatrix *matrix)
+{
+    if (shieldBubbleActive > 0)
+    {
+        // Erase previous bubble position if ship moved
+        if (lastBubbleX != x || lastBubbleY != y)
+        {
+            eraseShieldBubble(matrix);
+        }
+
+        // Update position
+        lastBubbleX = x;
+        lastBubbleY = y;
+
+        // Blink every 3 ticks
+        if (clock % 3 != 0)
+        {
+            drawShieldBubble(matrix);
+        }
+        else
+        {
+            eraseShieldBubble(matrix);
+        }
+
+        // Check if bubble duration expired
+        if ((clock - shieldBubbleStart) >= shieldBubbleActive)
+        {
+            eraseShieldBubble(matrix);
+            shieldBubbleActive = 0;
+        }
+    }
+}
+
+void Ship::drawShieldBubble(RGBMatrix *matrix)
+{
+    // Draw a circular shield around the ship (radius ~5 pixels)
+    // Using a simple circle pattern
+    int cx = x;
+    int cy = y;
+
+    // Shield color - dimmer cyan/blue glow (lower opacity)
+    int r = 30, g = 80, b = 140;
+
+    // Top and bottom
+    matrix->SetPixel(cy - 5, cx, r, g, b);
+    matrix->SetPixel(cy - 5, cx - 1, r, g, b);
+    matrix->SetPixel(cy - 5, cx + 1, r, g, b);
+    matrix->SetPixel(cy + 5, cx, r, g, b);
+    matrix->SetPixel(cy + 5, cx - 1, r, g, b);
+    matrix->SetPixel(cy + 5, cx + 1, r, g, b);
+
+    // Upper corners
+    matrix->SetPixel(cy - 4, cx - 3, r, g, b);
+    matrix->SetPixel(cy - 4, cx + 3, r, g, b);
+    matrix->SetPixel(cy - 3, cx - 4, r, g, b);
+    matrix->SetPixel(cy - 3, cx + 4, r, g, b);
+
+    // Lower corners
+    matrix->SetPixel(cy + 4, cx - 3, r, g, b);
+    matrix->SetPixel(cy + 4, cx + 3, r, g, b);
+    matrix->SetPixel(cy + 3, cx - 4, r, g, b);
+    matrix->SetPixel(cy + 3, cx + 4, r, g, b);
+
+    // Sides
+    matrix->SetPixel(cy - 2, cx - 5, r, g, b);
+    matrix->SetPixel(cy - 1, cx - 5, r, g, b);
+    matrix->SetPixel(cy, cx - 5, r, g, b);
+    matrix->SetPixel(cy + 1, cx - 5, r, g, b);
+    matrix->SetPixel(cy + 2, cx - 5, r, g, b);
+
+    matrix->SetPixel(cy - 2, cx + 5, r, g, b);
+    matrix->SetPixel(cy - 1, cx + 5, r, g, b);
+    matrix->SetPixel(cy, cx + 5, r, g, b);
+    matrix->SetPixel(cy + 1, cx + 5, r, g, b);
+    matrix->SetPixel(cy + 2, cx + 5, r, g, b);
+}
+
+void Ship::eraseShieldBubble(RGBMatrix *matrix)
+{
+    int cx = lastBubbleX;
+    int cy = lastBubbleY;
+
+    // Background color
+    int r = 18, g = 10, b = 14;
+
+    // Top and bottom
+    matrix->SetPixel(cy - 5, cx, r, g, b);
+    matrix->SetPixel(cy - 5, cx - 1, r, g, b);
+    matrix->SetPixel(cy - 5, cx + 1, r, g, b);
+    matrix->SetPixel(cy + 5, cx, r, g, b);
+    matrix->SetPixel(cy + 5, cx - 1, r, g, b);
+    matrix->SetPixel(cy + 5, cx + 1, r, g, b);
+
+    // Upper corners
+    matrix->SetPixel(cy - 4, cx - 3, r, g, b);
+    matrix->SetPixel(cy - 4, cx + 3, r, g, b);
+    matrix->SetPixel(cy - 3, cx - 4, r, g, b);
+    matrix->SetPixel(cy - 3, cx + 4, r, g, b);
+
+    // Lower corners
+    matrix->SetPixel(cy + 4, cx - 3, r, g, b);
+    matrix->SetPixel(cy + 4, cx + 3, r, g, b);
+    matrix->SetPixel(cy + 3, cx - 4, r, g, b);
+    matrix->SetPixel(cy + 3, cx + 4, r, g, b);
+
+    // Sides
+    matrix->SetPixel(cy - 2, cx - 5, r, g, b);
+    matrix->SetPixel(cy - 1, cx - 5, r, g, b);
+    matrix->SetPixel(cy, cx - 5, r, g, b);
+    matrix->SetPixel(cy + 1, cx - 5, r, g, b);
+    matrix->SetPixel(cy + 2, cx - 5, r, g, b);
+
+    matrix->SetPixel(cy - 2, cx + 5, r, g, b);
+    matrix->SetPixel(cy - 1, cx + 5, r, g, b);
+    matrix->SetPixel(cy, cx + 5, r, g, b);
+    matrix->SetPixel(cy + 1, cx + 5, r, g, b);
+    matrix->SetPixel(cy + 2, cx + 5, r, g, b);
 }
 
 class Hostile_ship : public Ship

@@ -19,14 +19,18 @@ void Game::update(const InputState& input, RGBMatrix *matrix, int clock) {
 
     // Update ship stats based on potentiometer distribution
     player.updateDistribution(input.potentiometer);
+    player.updateWeaponMode(input.potentiometer2);
     player.regenerateShield(clock);
 
     // Update positions
     player.move(input.joystick_x, input.joystick_y, clock);
     player.dash(input.joystick_x, input.joystick_y, input.button1, clock, matrix);
     player.updateDashTrail(clock, matrix);
-    player.fire(input.button1, input.button2, input.button3, clock);
+    player.fire(input.button1, input.button2, input.button3, clock, matrix);
     player.updateBullets();
+    player.updateLaser(clock, matrix);
+    player.activateShieldBubble(input.button3, clock, matrix);
+    player.updateShieldBubble(clock, matrix);
 
     // Draw everything
     player.effects(input.joystick_x, input.joystick_y, clock, matrix);

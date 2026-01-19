@@ -86,7 +86,7 @@ private:
     int port_;
     int sockfd_;
     bool running_;
-    InputState lastState_ = {0, 0, 0, false, false, false};  // Center joystick default
+    InputState lastState_ = {0, 0, 0, 0, false, false, false};  // Center joystick default
 
     void parseInput(const char* buffer, InputState& state) {
         // Parse Feather format: {"joyX":0,"joyY":0,"pot1":0,"pot2":0,"btn1":0,"btn2":0,"btn3":0}
@@ -97,6 +97,7 @@ private:
             state.joystick_x = x;
             state.joystick_y = y;
             state.potentiometer = p1;
+            state.potentiometer2 = p2;
             state.button1 = (b1 != 0);
             state.button2 = (b2 != 0);
             state.button3 = (b3 != 0);

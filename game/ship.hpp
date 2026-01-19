@@ -45,7 +45,10 @@ public:
     //Actions
 
     virtual void takeDamage(int damage);
-    virtual void fire(bool button1, bool button2, bool button3, int clock);
+    virtual void fire(bool button1, bool button2, bool button3, int clock, RGBMatrix *matrix);
+    virtual void updateWeaponMode(int pot2);
+    virtual void updateLaser(int clock, RGBMatrix *matrix);
+    virtual void eraseLaser(RGBMatrix *matrix);
     virtual void move(int x, int y, int clock);
     virtual void updateBullets();
     virtual void drawBullets(RGBMatrix *matrix);
@@ -55,6 +58,10 @@ public:
     virtual void dash(int joystickX, int joystickY, bool button1, int clock, RGBMatrix *matrix);
     virtual void updateDashTrail(int clock, RGBMatrix *matrix);
     virtual void eraseDashTrail(RGBMatrix *matrix);
+    virtual void activateShieldBubble(bool button3, int clock, RGBMatrix *matrix);
+    virtual void updateShieldBubble(int clock, RGBMatrix *matrix);
+    virtual void drawShieldBubble(RGBMatrix *matrix);
+    virtual void eraseShieldBubble(RGBMatrix *matrix);
 
     //Display
     virtual void draw(RGBMatrix *matrix);
@@ -87,6 +94,29 @@ private:
     void drawShipAt(int posX, int posY, float opacity, RGBMatrix *matrix);
     void eraseShipAt(int posX, int posY, RGBMatrix *matrix);
     Bullet bullets[MAX_BULLETS];
+
+    // Weapon mode (0=normal, 1=dual shot, 2=laser)
+    int weaponMode;
+    int laserCharging;    // 0 = not charging, >0 = charging tick count
+    int laserActive;      // 0 = inactive, >0 = active tick count
+    int laserStartTick;   // Clock tick when laser started
+    int lastLaserY;       // Y position where laser was drawn (for erase)
+    int lastLaserX;       // X position where laser was drawn (for erase)
+
+    // Shield bubble
+    int shieldBubbleActive;    // 0 = inactive, >0 = active tick count
+    int shieldBubbleStart;     // Clock tick when bubble started
+    int shieldBubbleCooldown;  // Clock tick of last bubble use
+    int lastBubbleX;           // Position where bubble was drawn (for erase)
+    int lastBubbleY;
+
+    // Dash animation
+    bool dashAnimating;        // True while dash animation is in progress
+    int dashStartX;            // Starting X position for dash
+    int dashStartY;            // Starting Y position for dash
+    int dashTargetX;           // Target X position for dash
+    int dashTargetY;           // Target Y position for dash
+    int dashAnimStart;         // Clock tick when animation started
 };
 
 #endif
