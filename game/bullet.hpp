@@ -21,6 +21,12 @@ public:
 
     void setLarge(bool large) { isLarge = large; }
     bool getLarge() const { return isLarge; }
+    
+    void setRocket(bool rocket) { isRocket = rocket; }
+    bool getRocket() const { return isRocket; }
+    
+    void setScatter(bool scatter) { isScatter = scatter; }
+    bool getScatter() const { return isScatter; }
 
 private:
     int x, y;       // Position
@@ -28,6 +34,8 @@ private:
     int r, g, b;    // Color
     bool active;
     bool isLarge;   // Large bullet (2x2)
+    bool isRocket;  // Rocket (explodes on impact)
+    bool isScatter; // Scatter shot bullet
 };
 
 #endif

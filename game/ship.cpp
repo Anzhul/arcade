@@ -33,6 +33,12 @@ Ship::Ship()
     shieldBubbleCooldown = 0;
     lastBubbleX = 0;
     lastBubbleY = 0;
+    dashAnimating = false;
+    dashStartX = 0;
+    dashStartY = 0;
+    dashTargetX = 0;
+    dashTargetY = 0;
+    dashAnimStart = 0;
 }
 
 Ship::Ship(int health, int speed, int x, int y) : health(health), speed(speed), x(x), y(y) {}
@@ -122,9 +128,9 @@ void Ship::fire(bool button1, bool button2, bool button3, int clock, RGBMatrix *
     if (weaponMode == 0)
     {
         // Mode 0: Normal single bullet (pot2 0-32)
-        // Faster fire rate: fire_rate ranges 10-2 (half of base)
-        int mode0_rate = fire_rate / 2;
-        if (mode0_rate < 2) mode0_rate = 2;
+        // Faster fire rate: fire_rate ranges 20-3, divided by 3 for even faster shooting
+        int mode0_rate = fire_rate / 3;
+        if (mode0_rate < 1) mode0_rate = 1;
         if (button2 && (clock - cooldown2) >= mode0_rate)
         {
             for (int i = 0; i < MAX_BULLETS; i++)
@@ -140,20 +146,32 @@ void Ship::fire(bool button1, bool button2, bool button3, int clock, RGBMatrix *
     }
     else if (weaponMode == 1)
     {
-        // Mode 1: Dual large shot (pot2 33-65)
-        // Fixed fire rate of 45 ticks
-        int mode1_rate = 45;
+        // Mode 1: Scatter shot (8 bullets in spread pattern)
+        // Use fire_rate * 3 for slower rate with multiple bullets
+        int mode1_rate = fire_rate * 3;
         if (button2 && (clock - cooldown2) >= mode1_rate)
         {
             int bulletsCreated = 0;
-            for (int i = 0; i < MAX_BULLETS && bulletsCreated < 2; i++)
+            // 8 directions: up, up-left, up-right, left, right, down-left, down-right, slight angles
+            int directions[8][2] = {
+                {0, -2},   // Straight up (fast)
+                {-1, -2},  // Up-left
+                {1, -2},   // Up-right
+                {-2, -1},  // Left-up
+                {2, -1},   // Right-up
+                {-1, -1},  // Diagonal left
+                {1, -1},   // Diagonal right
+                {0, -1}    // Straight up (slower)
+            };
+            
+            for (int i = 0; i < MAX_BULLETS && bulletsCreated < 8; i++)
             {
                 if (!bullets[i].isActive())
                 {
-                    // Offset 1 pixel from center, larger bullets (2x2)
-                    int offsetX = (bulletsCreated == 0) ? -1 : 1;
-                    bullets[i] = Bullet(x + offsetX, y - 2, 0, -1, 255, 100, 100);  // Slower, red
-                    bullets[i].setLarge(true);  // Mark as large bullet
+                    int dx = directions[bulletsCreated][0];
+                    int dy = directions[bulletsCreated][1];
+                    bullets[i] = Bullet(x, y - 2, dx, dy, 255, 200, 0);  // Orange scatter
+                    bullets[i].setScatter(true);  // Mark as scatter shot
                     bulletsCreated++;
                 }
             }
@@ -162,9 +180,29 @@ void Ship::fire(bool button1, bool button2, bool button3, int clock, RGBMatrix *
     }
     else if (weaponMode == 2)
     {
-        // Mode 2: Charging laser (pot2 66-99)
-        // Fixed charge time of 45 ticks
-        int chargeTime = 45;
+        // Mode 2: Rocket launcher
+        // Use fire_rate * 5 for much slower rate (powerful weapon)
+        int mode2_rate = fire_rate * 5;
+        if (button2 && (clock - cooldown2) >= mode2_rate)
+        {
+            for (int i = 0; i < MAX_BULLETS; i++)
+            {
+                if (!bullets[i].isActive())
+                {
+                    bullets[i] = Bullet(x, y - 3, 0, -3, 255, 50, 0);  // Red rocket, faster
+                    bullets[i].setLarge(true);   // Rockets are large
+                    bullets[i].setRocket(true);  // Mark as rocket
+                    cooldown2 = clock;
+                    break;
+                }
+            }
+        }
+    }
+    else if (weaponMode == 3)
+    {
+        // Mode 3: Charging laser (pot2 75-99)
+        // Charge time based on fire_rate: slower at pot=0, faster at pot=100
+        int chargeTime = (fire_rate * 7) / 2;  // Scales with fire rate (70-10.5 ticks)
 
         if (button2)
         {
@@ -241,17 +279,21 @@ void Ship::fire(bool button1, bool button2, bool button3, int clock, RGBMatrix *
 
 void Ship::updateWeaponMode(int pot2)
 {
-    if (pot2 <= 32)
+    if (pot2 <= 20)
     {
         weaponMode = 0;  // Normal
     }
-    else if (pot2 <= 65)
+    else if (pot2 <= 45)
     {
-        weaponMode = 1;  // Dual shot
+        weaponMode = 1;  // Scatter shot (8-way)
+    }
+    else if (pot2 <= 70)
+    {
+        weaponMode = 2;  // Rocket
     }
     else
     {
-        weaponMode = 2;  // Laser
+        weaponMode = 3;  // Laser
     }
 }
 
@@ -332,8 +374,42 @@ void Ship::dash(int joystickX, int joystickY, bool button1, int clock, RGBMatrix
 {
     const int DASH_COOLDOWN = 20;  // 0.5 second at 100fps
     const int DASH_DISTANCE = 10;
+    const int DASH_DURATION = 3;   // 3 ticks for animation (faster)
     const int deadzone = 5;
 
+    // If dash animation is in progress, update position
+    if (dashAnimating)
+    {
+        int elapsed = clock - dashAnimStart;
+
+        // Store current position as trail before moving
+        if (dashTrailCount < 5)
+        {
+            dashTrailX[dashTrailCount] = x;
+            dashTrailY[dashTrailCount] = y;
+            dashTrailCount++;
+        }
+
+        if (elapsed >= DASH_DURATION)
+        {
+            // Animation complete, snap to target
+            x = dashTargetX;
+            y = dashTargetY;
+            dashAnimating = false;
+            // Reset trail start time so it fades after animation completes
+            dashTrailStart = clock;
+        }
+        else
+        {
+            // Interpolate position over 3 ticks
+            int progress = elapsed + 1;  // 1 to 3
+            x = dashStartX + ((dashTargetX - dashStartX) * progress) / DASH_DURATION;
+            y = dashStartY + ((dashTargetY - dashStartY) * progress) / DASH_DURATION;
+        }
+        return;
+    }
+
+    // Don't start new dash if on cooldown or button not pressed
     if (!button1 || (clock - dashCooldown) < DASH_COOLDOWN)
     {
         return;
@@ -348,61 +424,68 @@ void Ship::dash(int joystickX, int joystickY, bool button1, int clock, RGBMatrix
         return;  // No direction, stay stationary
     }
 
-    // Store starting position for trail
-    int startX = x;
-    int startY = y;
+    // Store starting position
+    dashStartX = x;
+    dashStartY = y;
+    dashTargetX = x;
+    dashTargetY = y;
 
-    // Calculate dash direction and apply
-    int dirX = 0, dirY = 0;
+    // Check if movement is pure X or Y (not diagonal)
+    bool movingX = (joystickX > deadzone || joystickX < -deadzone);
+    bool movingY = (joystickY > deadzone || joystickY < -deadzone);
+    int distance = (movingX && movingY) ? DASH_DISTANCE : DASH_DISTANCE + 5;  // 15 for pure, 10 for diagonal
+
+    // Calculate target position
     if (joystickY > deadzone)
     {
-        dirY = 1;
-        y += DASH_DISTANCE;
-        if (y > 64) y = 64;
+        dashTargetY = y + distance;
+        if (dashTargetY > 64) dashTargetY = 64;
     }
     else if (joystickY < -deadzone)
     {
-        dirY = -1;
-        y -= DASH_DISTANCE;
-        if (y < 0) y = 0;
+        dashTargetY = y - distance;
+        if (dashTargetY < 0) dashTargetY = 0;
     }
 
     if (joystickX > deadzone)
     {
-        dirX = -1;
-        x -= DASH_DISTANCE;
+        dashTargetX = x - distance;
     }
     else if (joystickX < -deadzone)
     {
-        dirX = 1;
-        x += DASH_DISTANCE;
+        dashTargetX = x + distance;
     }
 
-    // Create ghost ship trail positions (every 2 pixels along the path)
-    dashTrailCount = 0;
-    int trailX = startX;
-    int trailY = startY;
-    for (int i = 2; i < DASH_DISTANCE && dashTrailCount < 5; i += 2)
-    {
-        trailX = startX + dirX * i;
-        trailY = startY + dirY * i;
-        dashTrailX[dashTrailCount] = trailX;
-        dashTrailY[dashTrailCount] = trailY;
-        // Draw faded ship at this position (opacity decreases along trail)
-        float opacity = 0.3f - (dashTrailCount * 0.05f);
-        drawShipAt(trailX, trailY, opacity, matrix);
-        dashTrailCount++;
-    }
+    // Initialize trail with starting position
+    dashTrailCount = 1;
+    dashTrailX[0] = dashStartX;
+    dashTrailY[0] = dashStartY;
     dashTrailStart = clock;
 
+    // Start animation
+    dashAnimating = true;
+    dashAnimStart = clock;
     dashCooldown = clock;
 }
 
 void Ship::updateDashTrail(int clock, RGBMatrix *matrix)
 {
-    const int TRAIL_DURATION = 2;  // 20ms at 100fps = 2 ticks
+    const int TRAIL_DURATION = 5;  // Trail lingers a bit after dash completes
 
-    if (dashTrailCount > 0 && (clock - dashTrailStart) >= TRAIL_DURATION)
+    // Draw trail (during animation or lingering after)
+    if (dashTrailCount > 0)
+    {
+        // Draw all trail positions with decreasing opacity (oldest = most faded)
+        for (int i = 0; i < dashTrailCount; i++)
+        {
+            // Oldest trail (i=0) is most faded, newest is brightest
+            float opacity = 0.15f + (0.15f * i / dashTrailCount);
+            drawShipAt(dashTrailX[i], dashTrailY[i], opacity, matrix);
+        }
+    }
+
+    // Only erase trail after animation is done and duration has passed
+    if (!dashAnimating && dashTrailCount > 0 && (clock - dashTrailStart) >= TRAIL_DURATION)
     {
         // Erase trail
         eraseDashTrail(matrix);

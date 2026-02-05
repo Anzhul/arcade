@@ -70,6 +70,9 @@ public:
 
     // Bullet access
     Bullet* getBullets() { return bullets; }
+    int getLaserActive() const { return laserActive; }
+    int getLastLaserX() const { return lastLaserX; }
+    int getLastLaserY() const { return lastLaserY; }
 
 private:
     int health;
@@ -95,7 +98,7 @@ private:
     void eraseShipAt(int posX, int posY, RGBMatrix *matrix);
     Bullet bullets[MAX_BULLETS];
 
-    // Weapon mode (0=normal, 1=dual shot, 2=laser)
+    // Weapon mode (0=normal, 1=scatter, 2=rocket, 3=laser)
     int weaponMode;
     int laserCharging;    // 0 = not charging, >0 = charging tick count
     int laserActive;      // 0 = inactive, >0 = active tick count

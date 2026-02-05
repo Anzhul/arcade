@@ -14,11 +14,18 @@
 #include "led-matrix.h"
 using namespace rgb_matrix;
 
+enum AlienType {
+    BASIC,      // Green, 30 HP
+    FAST,       // Yellow, 20 HP, moves faster
+    TANK,       // Red, 60 HP, slower
+    ELITE       // Purple, 40 HP, medium speed
+};
+
 class Alien{
 public:
     Alien();
-    Alien(int health, int speed, int x, int y);
-    ~Alien();
+    Alien(int health, int speed, int x, int y, AlienType type = BASIC);
+    virtual ~Alien();
 
         //Getters
 
@@ -33,6 +40,7 @@ public:
     virtual void setSpeed(int speed);
     virtual void setX(int x);
     virtual void setY(int y);
+    virtual AlienType getType() const;
 
         //Actions
 
@@ -43,11 +51,16 @@ public:
     //Display
     virtual void draw(RGBMatrix *matrix);
     virtual void erase(RGBMatrix *matrix);
+    virtual void updateDeathAnimation();
+    virtual bool isDead() const;
 private:
     int health;
     int speed;
     int x;
     int y;
+    int deathTimer;  // Timer for death animation
+    bool dying;      // Whether enemy is in death animation
+    AlienType type;  // Type of alien
 };
 
 #endif

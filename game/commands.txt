@@ -1,6 +1,5 @@
-g++ -o engine engine.cpp bullet.cpp ship.cpp game.cpp -lrgbmatrix -lrt -lm -lpthread -lwiringPi 
+cd /home/anzhu/Desktop/Arcade/game && g++ -o engine engine.cpp bullet.cpp ship.cpp game.cpp alien.cpp basic_alien.cpp elite_alien.cpp fast_alien.cpp tank_alien.cpp -lrgbmatrix -lrt -lm -lpthread -lwiringPi
 sudo ./engine
-
  
 g++ -o all_on all_on.cpp -I/home/anzhu/rpi-rgb-led-matrix/include -L/home/anzhu/rpi-rgb-led-matrix/lib -lrgbmatrix -lrt -lm -lpthread
 
