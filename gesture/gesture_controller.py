@@ -1,16 +1,17 @@
 """
-Gesture Controller for Arcade Ship Game
+Gesture Controller for Arcade Ship Game (Two-Hand Mode)
 Uses MediaPipe Hands to translate hand gestures into game inputs,
 then sends them over UDP in the same format as the Feather controller.
 
 Controls:
-  - Hand X position  -> joystick_x  (move ship left/right)
-  - Hand Y position  -> joystick_y  (move ship up/down)
-  - Index finger up  -> button1     (fire)
-  - Pinch (thumb+index close) -> button2  (dash / shield)
-  - All fingers extended       -> button3  (special weapon)
-  - Finger spread distance     -> pot1     (shield/firerate)
-  - Wrist tilt (hand angle)    -> pot2     (weapon mode)
+  Right hand:
+    - Wrist X/Y position       -> joystick_x / joystick_y (move ship)
+    - Index finger up           -> button1  (fire)
+    - All fingers extended      -> button3  (special weapon)
+  Left hand:
+    - Pinch (thumb+index close) -> button2  (dash / shield)
+    - Finger spread distance    -> pot1     (shield/firerate)
+    - Wrist tilt (hand angle)   -> pot2     (weapon mode)
 """
 
 import cv2
@@ -61,6 +62,17 @@ def map_range(value: float, in_lo: float, in_hi: float,
     return int(out_lo + ratio * (out_hi - out_lo))
 
 
+def hand_bbox(lm, img_w: int, img_h: int, padding: int = 20):
+    """Return (x1, y1, x2, y2) bounding box in pixel coords with padding."""
+    xs = [l.x * img_w for l in lm]
+    ys = [l.y * img_h for l in lm]
+    x1 = max(0, int(min(xs)) - padding)
+    y1 = max(0, int(min(ys)) - padding)
+    x2 = min(img_w, int(max(xs)) + padding)
+    y2 = min(img_h, int(max(ys)) + padding)
+    return x1, y1, x2, y2
+
+
 def build_packet(jx, jy, p1, p2, b1, b2, b3) -> bytes:
     data = {
         "joyX": jx, "joyY": jy,
@@ -87,7 +99,7 @@ def main(show_preview: bool = True):
     print("Press Q to quit.")
 
     with mp_hands.Hands(
-        max_num_hands=1,
+        max_num_hands=2,
         min_detection_confidence=0.7,
         min_tracking_confidence=0.6,
     ) as hands:
@@ -97,7 +109,7 @@ def main(show_preview: bool = True):
             # Flip so it acts as a mirror
             frame = cv2.flip(frame, 1)
             h, w = frame.shape[:2]
-            # picamera2 outputs RGB888; MediaPipe expects RGB, OpenCV display expects BGR
+            # picamera2 outputs RGB888; MediaPipe expects RGB, OpenCV expects BGR
             rgb = frame
             frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
             result = hands.process(rgb)
@@ -107,43 +119,75 @@ def main(show_preview: bool = True):
             b1 = b2 = b3 = False
 
             if result.multi_hand_landmarks:
-                lm = result.multi_hand_landmarks[0].landmark
+                # Assign hands by wrist x-position in mirrored frame:
+                # rightmost wrist = user's right hand
+                right_lm = None
+                left_lm = None
+                detected = [(hl.landmark, hl) for hl in result.multi_hand_landmarks]
 
-                # ── Joystick: wrist position mapped to ±100 ────────────────
-                wrist = lm[0]
-                jx = map_range(wrist.x, 0.15, 0.85, -100, 100)
-                jy = map_range(wrist.y, 0.1,  0.9,  -100, 100)
+                if len(detected) == 1:
+                    lm, _ = detected[0]
+                    if lm[0].x > 0.5:
+                        right_lm = lm
+                    else:
+                        left_lm = lm
+                elif len(detected) >= 2:
+                    # Sort by wrist x — rightmost first
+                    detected.sort(key=lambda d: d[0][0].x, reverse=True)
+                    right_lm = detected[0][0]
+                    left_lm = detected[1][0]
 
-                # ── Buttons ────────────────────────────────────────────────
-                index_up = finger_up(lm, 8, 6)
-                pinch_dist = landmark_dist(lm[4], lm[8])  # thumb-to-index
-                b1 = index_up                              # fire
-                b2 = pinch_dist < 0.05                     # dash/shield
-                b3 = count_fingers(lm) >= 5               # all open = special
+                # ── Right hand: movement + attack ─────────────────────────
+                if right_lm:
+                    wrist = right_lm[0]
+                    jx = map_range(wrist.x, 0.15, 0.85, -100, 100)
+                    jy = map_range(wrist.y, 0.1,  0.9,  -100, 100)
 
-                # ── Potentiometers ─────────────────────────────────────────
-                # pot1: spread of all finger tips (proxy for hand openness)
-                spread = landmark_dist(lm[4], lm[20])     # thumb to pinky tip
-                p1 = map_range(spread, 0.10, 0.55, 0, 100)
+                    b1 = finger_up(right_lm, 8, 6)              # fire
+                    b3 = count_fingers(right_lm) >= 5            # special
 
-                # pot2: angle of index MCP→tip vector (wrist tilt proxy)
-                dx = lm[8].x - lm[5].x
-                dy = lm[8].y - lm[5].y
-                angle = math.degrees(math.atan2(-dy, dx))  # 0°=right, 90°=up
-                p2 = map_range(angle, -90, 90, 0, 100)
+                # ── Left hand: defense + analog controls ──────────────────
+                if left_lm:
+                    pinch_dist = landmark_dist(left_lm[4], left_lm[8])
+                    b2 = pinch_dist < 0.05                       # dash/shield
 
+                    spread = landmark_dist(left_lm[4], left_lm[20])
+                    p1 = map_range(spread, 0.10, 0.55, 0, 100)
+
+                    dx = left_lm[8].x - left_lm[5].x
+                    dy = left_lm[8].y - left_lm[5].y
+                    angle = math.degrees(math.atan2(-dy, dx))
+                    p2 = map_range(angle, -90, 90, 0, 100)
+
+                # ── Draw both hands in preview ────────────────────────────
                 if show_preview:
-                    mp_drawing.draw_landmarks(
-                        frame, result.multi_hand_landmarks[0],
-                        mp_hands.HAND_CONNECTIONS,
-                    )
+                    for hand_landmarks in result.multi_hand_landmarks:
+                        mp_drawing.draw_landmarks(
+                            frame, hand_landmarks,
+                            mp_hands.HAND_CONNECTIONS,
+                        )
+
+                    for lm, is_right, tag in [
+                        (right_lm, True,
+                         f"RIGHT  fire={'ON' if b1 else 'off'}  spc={'ON' if b3 else 'off'}"),
+                        (left_lm, False,
+                         f"LEFT  dash={'ON' if b2 else 'off'}  p1={p1} p2={p2}"),
+                    ]:
+                        if lm is None:
+                            continue
+                        color = (0, 255, 0) if is_right else (255, 165, 0)
+                        x1, y1, x2, y2 = hand_bbox(lm, w, h)
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                        cv2.putText(frame, tag, (x1, y1 - 6),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
 
             # Send packet every frame
             packet = build_packet(jx, jy, p1, p2, b1, b2, b3)
             sock.sendto(packet, (GAME_IP, GAME_PORT))
 
             if show_preview:
-                label = (f"joyX={jx:+4d} joyY={jy:+4d} | "
+                num_hands = len(result.multi_hand_landmarks) if result.multi_hand_landmarks else 0
+                label = (f"hands={num_hands} | joyX={jx:+4d} joyY={jy:+4d} | "
                          f"p1={p1:3d} p2={p2:3d} | "
                          f"b1={int(b1)} b2={int(b2)} b3={int(b3)}")
                 cv2.putText(frame, label, (8, 24),
