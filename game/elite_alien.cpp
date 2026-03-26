@@ -2,17 +2,21 @@
 #include <cstdlib>
 
 EliteAlien::EliteAlien() : Alien(40, 1, 32, 5, ELITE) {
-    horizontalDirection = (rand() % 2) * 2 - 1;  // Random -1 or 1
-    movePattern = rand() % 3;  // 0 = zigzag, 1 = wave, 2 = erratic
+    horizontalDirection = (rand() % 2) * 2 - 1;
+    movePattern = rand() % 3;
     moveCounter = 0;
-    shotCooldown = 30 + (rand() % 70);  // First shot after 30-100 frames
+    shotCooldown = 20 + (rand() % 40);
+    shield = 20;     // Half of 40 HP is shield
+    shieldFlash = 0;
 }
 
 EliteAlien::EliteAlien(int x_in, int y_in) : Alien(40, 1, x_in, y_in, ELITE) {
     horizontalDirection = (rand() % 2) * 2 - 1;
     movePattern = rand() % 3;
     moveCounter = 0;
-    shotCooldown = 30 + (rand() % 70);
+    shotCooldown = 20 + (rand() % 40);
+    shield = 20;
+    shieldFlash = 0;
 }
 
 EliteAlien::~EliteAlien() {
@@ -21,6 +25,7 @@ EliteAlien::~EliteAlien() {
 void EliteAlien::move(int dx, int dy) {
     moveCounter++;
     shotCooldown--;
+    if (shieldFlash > 0) shieldFlash--;
     
     // Horizontal movement based on pattern
     int horizontalMove = 0;
@@ -67,7 +72,26 @@ bool EliteAlien::shouldShoot() {
 }
 
 void EliteAlien::resetShotCooldown() {
-    shotCooldown = 50 + (rand() % 50);  // Shoot every 50-100 frames
+    shotCooldown = 25 + (rand() % 30);  // Shoot every 25-55 frames
+}
+
+void EliteAlien::takeDamage(int damage) {
+    if (shield > 0) {
+        shieldFlash = 5;  // Blue flash for 5 frames
+        if (damage <= shield) {
+            shield -= damage;
+            return;  // Shield absorbed all damage
+        } else {
+            damage -= shield;
+            shield = 0;
+        }
+    }
+    // Pass remaining damage to base class
+    Alien::takeDamage(damage);
+}
+
+int EliteAlien::getShield() const {
+    return shield;
 }
 
 void EliteAlien::draw(RGBMatrix *matrix) {
@@ -76,29 +100,85 @@ void EliteAlien::draw(RGBMatrix *matrix) {
     int x = get_x();
     int y = get_y();
     
-    // Bounds check - elite has antenna extending 2 pixels up
-    if (x < 1 || x >= 63 || y < 2 || y >= 63) return;
-    
+    // Bounds check - skip if completely off screen (allow partial at bottom)
+    if (x < 3 || x >= 61 || y < 3 || y > 68) return;
+
     if (get_health() == 0) {
-        // Use parent class death animation
         Alien::draw(matrix);
         return;
     }
-    
-    // Purple elite alien sprite (3x3 pixels with energy glow)
-    // Center - bright purple
-    matrix->SetPixel(y, x, 200, 0, 255);
-    
-    // Arms/wings
-    matrix->SetPixel(y, x - 1, 150, 0, 200);
-    matrix->SetPixel(y, x + 1, 150, 0, 200);
-    
-    // Bottom
-    matrix->SetPixel(y + 1, x - 1, 100, 0, 150);
-    matrix->SetPixel(y + 1, x, 130, 0, 180);
-    matrix->SetPixel(y + 1, x + 1, 100, 0, 150);
-    
-    // Top with antenna/crown
-    matrix->SetPixel(y - 1, x, 130, 0, 180);
-    matrix->SetPixel(y - 2, x, 80, 0, 120);  // Antenna
+
+    // Hit flash (white blend when taking health damage)
+    int flash = getHitFlash();
+    auto sp = [matrix, flash](int py, int px, int r, int g, int b) {
+        if (px >= 0 && px < 64 && py >= 0 && py < 64) {
+            if (flash > 0) {
+                int f = flash * 50;
+                r = r + (160 - r) * f / 200;
+                g = g + (30 - g) * f / 200;
+                b = b + (30 - b) * f / 200;
+            }
+            matrix->SetPixel(py, px, r, g, b);
+        }
+    };
+
+    // Winged elite alien - dusty plum/violet palette
+    // Row +2: front mandibles
+    sp(y + 2, x - 1, 130, 60, 140);
+    sp(y + 2, x + 1, 130, 60, 140);
+
+    // Row +1: wide jaw / front shell
+    sp(y + 1, x - 2, 85, 40, 95);
+    sp(y + 1, x - 1, 110, 55, 120);
+    sp(y + 1, x, 120, 70, 130);
+    sp(y + 1, x + 1, 110, 55, 120);
+    sp(y + 1, x + 2, 85, 40, 95);
+
+    // Row 0: center body with wide wings
+    sp(y, x - 3, 60, 35, 70);
+    sp(y, x - 2, 90, 45, 100);
+    sp(y, x - 1, 110, 60, 120);
+    sp(y, x, 140, 80, 150);     // bright center eye
+    sp(y, x + 1, 110, 60, 120);
+    sp(y, x + 2, 90, 45, 100);
+    sp(y, x + 3, 60, 35, 70);
+
+    // Row -1: upper body with shoulder spikes
+    sp(y - 1, x - 3, 70, 40, 80);
+    sp(y - 1, x - 1, 95, 50, 105);
+    sp(y - 1, x, 105, 60, 115);
+    sp(y - 1, x + 1, 95, 50, 105);
+    sp(y - 1, x + 3, 70, 40, 80);
+
+    // Row -2: crown / horns
+    sp(y - 2, x - 2, 80, 45, 90);
+    sp(y - 2, x, 75, 40, 85);
+    sp(y - 2, x + 2, 80, 45, 90);
+
+    // Row -3: horn tips
+    sp(y - 3, x - 2, 100, 55, 110);
+    sp(y - 3, x + 2, 100, 55, 110);
+
+    // Shield edge glow - blue outline when shield is hit
+    if (shieldFlash > 0) {
+        int sb = 80 + shieldFlash * 35;  // Bright blue that fades
+        auto edge = [matrix, sb](int py, int px) {
+            if (px >= 0 && px < 64 && py >= 0 && py < 64)
+                matrix->SetPixel(py, px, 30, 60, sb);
+        };
+        // Outline around the sprite
+        edge(y + 2, x - 2);
+        edge(y + 2, x + 2);
+        edge(y + 3, x);  // front center edge
+        edge(y + 1, x - 3);
+        edge(y + 1, x + 3);
+        edge(y, x - 4);
+        edge(y, x + 4);
+        edge(y - 1, x - 4);
+        edge(y - 1, x + 4);
+        edge(y - 2, x - 3);
+        edge(y - 2, x + 3);
+        edge(y - 3, x - 3);
+        edge(y - 3, x + 3);
+    }
 }

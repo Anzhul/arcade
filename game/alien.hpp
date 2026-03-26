@@ -18,7 +18,8 @@ enum AlienType {
     BASIC,      // Green, 30 HP
     FAST,       // Yellow, 20 HP, moves faster
     TANK,       // Red, 60 HP, slower
-    ELITE       // Purple, 40 HP, medium speed
+    ELITE,      // Purple, 40 HP, medium speed
+    BOSS        // Boss, 300 HP + 100 shield, three phases
 };
 
 class Alien{
@@ -47,6 +48,7 @@ public:
     virtual void takeDamage(int damage);
     virtual void fire();
     virtual void move(int x, int y);
+    int getHitFlash() const;
 
     //Display
     virtual void draw(RGBMatrix *matrix);
@@ -61,6 +63,7 @@ private:
     int deathTimer;  // Timer for death animation
     bool dying;      // Whether enemy is in death animation
     AlienType type;  // Type of alien
+    int hitFlashTimer;  // Frames remaining for hit flash effect
 };
 
 #endif

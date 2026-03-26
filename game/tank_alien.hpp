@@ -8,8 +8,11 @@ public:
     TankAlien();
     TankAlien(int x, int y);
     ~TankAlien();
-    
+
     void draw(RGBMatrix *matrix) override;
+
+private:
+    int frameCounter;
 };
 
 #endif

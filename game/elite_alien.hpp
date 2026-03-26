@@ -11,14 +11,18 @@ public:
     
     void draw(RGBMatrix *matrix) override;
     void move(int dx, int dy) override;
-    bool shouldShoot();  // Check if alien should shoot this frame
-    void resetShotCooldown();  // Reset cooldown after shooting
-    
+    void takeDamage(int damage) override;
+    bool shouldShoot();
+    void resetShotCooldown();
+    int getShield() const;
+
 private:
-    int horizontalDirection;  // -1 for left, 1 for right
-    int movePattern;          // Random movement pattern (0-2)
-    int moveCounter;          // Counter for movement changes
-    int shotCooldown;         // Frames until next shot
+    int horizontalDirection;
+    int movePattern;
+    int moveCounter;
+    int shotCooldown;
+    int shield;         // Shield HP (absorbs damage first)
+    int shieldFlash;    // Timer for blue shield flash effect
 };
 
 #endif

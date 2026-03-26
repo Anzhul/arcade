@@ -8,6 +8,7 @@ Alien::Alien() {
     deathTimer = 0;
     dying = false;
     type = BASIC;
+    hitFlashTimer = 0;
 }
 
 Alien::Alien(int health_in, int speed_in, int x_in, int y_in, AlienType type_in) {
@@ -18,6 +19,7 @@ Alien::Alien(int health_in, int speed_in, int x_in, int y_in, AlienType type_in)
     deathTimer = 0;
     dying = false;
     type = type_in;
+    hitFlashTimer = 0;
 }
 
 Alien::~Alien() {
@@ -65,13 +67,18 @@ AlienType Alien::getType() const {
 // Actions
 void Alien::takeDamage(int damage) {
     if (dying) return;  // Already dying
-    
+
     health -= damage;
+    if (hitFlashTimer <= 0) hitFlashTimer = 6;  // Only flash if previous flash finished
     if (health <= 0) {
         health = 0;
         dying = true;
         deathTimer = 0;
     }
+}
+
+int Alien::getHitFlash() const {
+    return hitFlashTimer;
 }
 
 void Alien::fire() {
@@ -87,8 +94,8 @@ void Alien::move(int dx, int dy) {
 void Alien::draw(RGBMatrix *matrix) {
     if (health < 0) return;  // Completely dead, don't draw
     
-    // Bounds check
-    if (x < 0 || x >= 64 || y < 0 || y >= 64) return;
+    // Bounds check - allow partial drawing at bottom edge
+    if (x < 0 || x >= 64 || y < 0 || y > 70) return;
     
     if (dying) {
         // Explosion effect - expanding and fading (bluish-green)
@@ -159,23 +166,21 @@ void Alien::draw(RGBMatrix *matrix) {
             break;
     }
     
-    // Bounds check for 3x3 sprite
-    if (x < 1 || x >= 63 || y < 1 || y >= 63) return;
-    
-    // Center
-    matrix->SetPixel(y, x, r, g, b);
-    
-    // Arms/wings
-    matrix->SetPixel(y, x - 1, r2, g2, b2);
-    matrix->SetPixel(y, x + 1, r2, g2, b2);
-    
-    // Bottom
-    matrix->SetPixel(y + 1, x - 1, r3, g3, b3);
-    matrix->SetPixel(y + 1, x, r4, g4, b4);
-    matrix->SetPixel(y + 1, x + 1, r3, g3, b3);
-    
-    // Top
-    matrix->SetPixel(y - 1, x, r4, g4, b4);
+    // Bounds check for 3x3 sprite (allow partial at bottom)
+    if (x < 1 || x >= 63 || y < 1 || y > 66) return;
+
+    auto safeSet = [matrix](int py, int px, int cr, int cg, int cb) {
+        if (px >= 0 && px < 64 && py >= 0 && py < 64)
+            matrix->SetPixel(py, px, cr, cg, cb);
+    };
+
+    safeSet(y, x, r, g, b);
+    safeSet(y, x - 1, r2, g2, b2);
+    safeSet(y, x + 1, r2, g2, b2);
+    safeSet(y + 1, x - 1, r3, g3, b3);
+    safeSet(y + 1, x, r4, g4, b4);
+    safeSet(y + 1, x + 1, r3, g3, b3);
+    safeSet(y - 1, x, r4, g4, b4);
 }
 
 void Alien::erase(RGBMatrix *matrix) {
@@ -194,6 +199,8 @@ void Alien::erase(RGBMatrix *matrix) {
 }
 
 void Alien::updateDeathAnimation() {
+    if (hitFlashTimer > 0) hitFlashTimer--;
+
     if (dying) {
         deathTimer++;
         if (deathTimer > 15) {  // Animation lasts 15 frames

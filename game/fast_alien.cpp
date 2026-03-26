@@ -27,9 +27,9 @@ void FastAlien::move(int dx, int dy) {
         dashCounter = 10;  // Dash for 10 frames
     }
     
-    // Apply 3x speed during dash
+    // Apply 5x speed during dash
     if (dashCounter > 0) {
-        Alien::move(dx * 3, dy * 3);
+        Alien::move(dx * 5, dy * 5);
         dashCounter--;
     } else {
         Alien::move(dx, dy);
@@ -42,32 +42,41 @@ void FastAlien::draw(RGBMatrix *matrix) {
     int x = get_x();
     int y = get_y();
     
-    // Bounds check - don't draw if off screen
-    if (x < 0 || x >= 64 || y < 0 || y >= 64) return;
-    
+    // Bounds check - skip if completely off screen (allow partial at bottom)
+    if (x < 0 || x >= 64 || y < 0 || y > 68) return;
+
     if (get_health() == 0) {
-        // Use parent class death animation
         Alien::draw(matrix);
         return;
     }
-    
-    // Yellow fast alien sprite - slim vertical design (1-2 pixels wide)
-    // Center core
-    matrix->SetPixel(y, x, 255, 255, 0);
-    matrix->SetPixel(y + 1, x, 255, 255, 0);
-    
-    // Top point
-    matrix->SetPixel(y - 1, x, 200, 200, 0);
-    
-    // Bottom
-    matrix->SetPixel(y + 2, x, 180, 180, 0);
-    
-    // Speed trail effect (dimmer pixels behind)
+
+    int flash = getHitFlash();
+    auto sp = [matrix, flash](int py, int px, int r, int g, int b) {
+        if (px >= 0 && px < 64 && py >= 0 && py < 64) {
+            if (flash > 0) {
+                int f = flash * 50;
+                r = r + (160 - r) * f / 200;
+                g = g + (30 - g) * f / 200;
+                b = b + (30 - b) * f / 200;
+            }
+            matrix->SetPixel(py, px, r, g, b);
+        }
+    };
+
+    // Cool teal fast alien sprite - slim vertical design
+    sp(y, x, 50, 150, 140);
+    sp(y + 1, x, 45, 135, 125);
+    sp(y - 1, x, 40, 120, 130);
+    sp(y + 2, x, 60, 140, 150);
+    sp(y, x - 1, 40, 90, 100);
+    sp(y, x + 1, 40, 90, 100);
+
+    // Speed trail effect
     if (dashCounter > 0) {
-        // Stronger trail during dash
-        matrix->SetPixel(y - 2, x, 150, 150, 0);
-        matrix->SetPixel(y - 3, x, 100, 100, 0);
+        sp(y - 2, x, 50, 80, 130);
+        sp(y - 3, x, 35, 55, 100);
+        sp(y - 4, x, 20, 30, 65);
     } else {
-        matrix->SetPixel(y - 2, x, 100, 100, 0);
+        sp(y - 2, x, 25, 50, 70);
     }
 }

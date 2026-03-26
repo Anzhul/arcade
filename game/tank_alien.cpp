@@ -2,15 +2,17 @@
 #include <algorithm>  // for std::max, std::min
 
 TankAlien::TankAlien() : Alien(60, 1, 32, 5, TANK) {
-    // Ensure position is valid for tank size (7x7)
-    setX(std::max(3, std::min(60, get_x())));
-    setY(std::max(3, std::min(60, get_y())));
+    // Ensure position is valid for tank size (extends 4px each direction)
+    setX(std::max(4, std::min(59, get_x())));
+    setY(std::max(4, std::min(59, get_y())));
+    frameCounter = 0;
 }
 
 TankAlien::TankAlien(int x_in, int y_in) : Alien(60, 1, x_in, y_in, TANK) {
-    // Ensure position is valid for tank size (7x7)
-    setX(std::max(3, std::min(60, x_in)));
-    setY(std::max(3, std::min(60, y_in)));
+    // Ensure position is valid for tank size (extends 4px each direction)
+    setX(std::max(4, std::min(59, x_in)));
+    setY(std::max(4, std::min(59, y_in)));
+    frameCounter = 0;
 }
 
 TankAlien::~TankAlien() {
@@ -22,46 +24,76 @@ void TankAlien::draw(RGBMatrix *matrix) {
     int x = get_x();
     int y = get_y();
     
-    // Bounds check - tank is 7x7, so check extended bounds
-    if (x < 3 || x >= 61 || y < 3 || y >= 61) return;
-    
+    // Bounds check - skip if completely off screen (allow partial at bottom)
+    if (x < 4 || x >= 60 || y < 4 || y > 70) return;
+
     if (get_health() == 0) {
-        // Use parent class death animation
         Alien::draw(matrix);
         return;
     }
-    
-    // Red tank alien sprite (large 7x7 pixels for heavily armored look)
-    // Center core (3x3)
-    matrix->SetPixel(y, x, 255, 0, 0);
-    matrix->SetPixel(y, x - 1, 220, 0, 0);
-    matrix->SetPixel(y, x + 1, 220, 0, 0);
-    matrix->SetPixel(y - 1, x, 220, 0, 0);
-    matrix->SetPixel(y + 1, x, 220, 0, 0);
-    matrix->SetPixel(y - 1, x - 1, 200, 0, 0);
-    matrix->SetPixel(y - 1, x + 1, 200, 0, 0);
-    matrix->SetPixel(y + 1, x - 1, 200, 0, 0);
-    matrix->SetPixel(y + 1, x + 1, 200, 0, 0);
-    
-    // Outer armor layer
-    matrix->SetPixel(y - 2, x, 180, 0, 0);
-    matrix->SetPixel(y + 2, x, 180, 0, 0);
-    matrix->SetPixel(y, x - 2, 180, 0, 0);
-    matrix->SetPixel(y, x + 2, 180, 0, 0);
-    
-    // Corner armor plates
-    matrix->SetPixel(y - 2, x - 1, 150, 0, 0);
-    matrix->SetPixel(y - 2, x + 1, 150, 0, 0);
-    matrix->SetPixel(y + 2, x - 1, 150, 0, 0);
-    matrix->SetPixel(y + 2, x + 1, 150, 0, 0);
-    matrix->SetPixel(y - 1, x - 2, 150, 0, 0);
-    matrix->SetPixel(y + 1, x - 2, 150, 0, 0);
-    matrix->SetPixel(y - 1, x + 2, 150, 0, 0);
-    matrix->SetPixel(y + 1, x + 2, 150, 0, 0);
-    
-    // Extra heavy armor points
-    matrix->SetPixel(y - 3, x, 120, 0, 0);
-    matrix->SetPixel(y + 3, x, 120, 0, 0);
-    matrix->SetPixel(y, x - 3, 120, 0, 0);
-    matrix->SetPixel(y, x + 3, 120, 0, 0);
+
+    int flash = getHitFlash();
+    auto sp = [matrix, flash](int py, int px, int r, int g, int b) {
+        if (px >= 0 && px < 64 && py >= 0 && py < 64) {
+            if (flash > 0) {
+                int f = flash * 50;
+                r = r + (160 - r) * f / 200;
+                g = g + (30 - g) * f / 200;
+                b = b + (30 - b) * f / 200;
+            }
+            matrix->SetPixel(py, px, r, g, b);
+        }
+    };
+
+    // Horseshoe crab tank - green/blue palette
+    // Row +3: wide front edge
+    sp(y + 3, x - 1, 25, 60, 70);
+    sp(y + 3, x, 30, 70, 80);
+    sp(y + 3, x + 1, 25, 60, 70);
+
+    // Row +2: widest part of shell
+    sp(y + 2, x - 3, 20, 50, 60);
+    sp(y + 2, x - 2, 30, 70, 85);
+    sp(y + 2, x - 1, 40, 90, 100);
+    sp(y + 2, x, 45, 100, 110);
+    sp(y + 2, x + 1, 40, 90, 100);
+    sp(y + 2, x + 2, 30, 70, 85);
+    sp(y + 2, x + 3, 20, 50, 60);
+
+    // Row +1: upper shell
+    sp(y + 1, x - 3, 25, 55, 65);
+    sp(y + 1, x - 2, 35, 80, 90);
+    sp(y + 1, x - 1, 50, 110, 80);
+    sp(y + 1, x, 60, 130, 85);
+    sp(y + 1, x + 1, 50, 110, 80);
+    sp(y + 1, x + 2, 35, 80, 90);
+    sp(y + 1, x + 3, 25, 55, 65);
+
+    // Row 0: center ridge
+    sp(y, x - 2, 30, 75, 85);
+    sp(y, x - 1, 45, 105, 75);
+    sp(y, x, 70, 150, 90);
+    sp(y, x + 1, 45, 105, 75);
+    sp(y, x + 2, 30, 75, 85);
+
+    // Row -1: narrowing body
+    sp(y - 1, x - 1, 30, 65, 80);
+    sp(y - 1, x, 40, 85, 95);
+    sp(y - 1, x + 1, 30, 65, 80);
+
+    // Row -2: narrow tail base
+    sp(y - 2, x, 25, 55, 75);
+
+    // Row -3: tail spike
+    sp(y - 3, x, 18, 40, 55);
+
+    // Flashing twin engine dots flanking tail - dim magenta
+    frameCounter++;
+    if ((frameCounter / 2) % 2 == 0) {
+        sp(y - 2, x - 1, 100, 25, 90);
+        sp(y - 2, x + 1, 100, 25, 90);
+    } else {
+        sp(y - 2, x - 1, 35, 10, 30);
+        sp(y - 2, x + 1, 35, 10, 30);
+    }
 }

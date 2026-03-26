@@ -806,8 +806,8 @@ void Ship::drawShieldBubble(RGBMatrix *matrix)
     int cx = x;
     int cy = y;
 
-    // Shield color - dimmer cyan/blue glow (lower opacity)
-    int r = 30, g = 80, b = 140;
+    // Shield color - muted teal glow
+    int r = 40, g = 85, b = 95;
 
     // Top and bottom
     matrix->SetPixel(cy - 5, cx, r, g, b);
