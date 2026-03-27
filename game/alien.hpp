@@ -19,7 +19,8 @@ enum AlienType {
     FAST,       // Yellow, 20 HP, moves faster
     TANK,       // Red, 60 HP, slower
     ELITE,      // Purple, 40 HP, medium speed
-    BOSS        // Boss, 300 HP + 100 shield, three phases
+    MINI_BOSS,  // Green, 150 HP + 50 shield, homing missile
+    BOSS        // Boss, 600 HP + 200 shield, four phases
 };
 
 class Alien{
@@ -49,6 +50,7 @@ public:
     virtual void fire();
     virtual void move(int x, int y);
     int getHitFlash() const;
+    void tickHitFlash();
 
     //Display
     virtual void draw(RGBMatrix *matrix);

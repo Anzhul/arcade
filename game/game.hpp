@@ -7,6 +7,7 @@
 #include "tank_alien.hpp"
 #include "elite_alien.hpp"
 #include "boss_alien.hpp"
+#include "mini_boss_alien.hpp"
 #include "led-matrix.h"
 #include "input.hpp"
 using namespace rgb_matrix;
@@ -29,6 +30,7 @@ struct Wave {
     int fastCount;
     int tankCount;
     int eliteCount;
+    int miniBossCount;
     int spawnRate;  // Ticks between spawns
 };
 
@@ -80,6 +82,8 @@ private:
 
     Ship player;
     bool bossActive;
+    bool bossSwarmSpawned;    // Whether phase 3 swarm has been spawned
+    int bossSwarmRemaining;   // How many swarm aliens left to spawn
     Alien* enemies[MAX_ENEMIES];
     Bullet enemyBullets[MAX_ENEMY_BULLETS];
     Explosion explosions[MAX_EXPLOSIONS];
@@ -97,7 +101,8 @@ private:
     int waveSpawnedFast;
     int waveSpawnedTank;
     int waveSpawnedElite;
-    bool allWavesComplete;    // All waves fully spawned
+    int waveSpawnedMiniBoss;
+    bool allWavesComplete;
     GameState gameState;
     int menuSelection;  // 0=Play, 1=Level Select, 2=Quit
     int levelSelectChoice;  // Selected level (1-5)

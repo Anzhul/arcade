@@ -1,9 +1,9 @@
 #include "bullet.hpp"
 
-Bullet::Bullet() : x(0), y(0), dx(0), dy(-1), r(255), g(0), b(0), active(false), isLarge(false), isRocket(false), isScatter(false) {}
+Bullet::Bullet() : x(0), y(0), dx(0), dy(-1), r(255), g(0), b(0), active(false), isLarge(false), isRocket(false), isScatter(false), isHoming(false) {}
 
 Bullet::Bullet(int x, int y, int dx, int dy, int r, int g, int b)
-    : x(x), y(y), dx(dx), dy(dy), r(r), g(g), b(b), active(true), isLarge(false), isRocket(false), isScatter(false) {}
+    : x(x), y(y), dx(dx), dy(dy), r(r), g(g), b(b), active(true), isLarge(false), isRocket(false), isScatter(false), isHoming(false) {}
 
 void Bullet::update() {
     if (!active) return;

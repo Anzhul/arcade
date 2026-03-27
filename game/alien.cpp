@@ -81,6 +81,10 @@ int Alien::getHitFlash() const {
     return hitFlashTimer;
 }
 
+void Alien::tickHitFlash() {
+    if (hitFlashTimer > 0) hitFlashTimer--;
+}
+
 void Alien::fire() {
     // TODO: Implement enemy firing
 }

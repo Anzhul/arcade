@@ -19,6 +19,7 @@ Game::Game() {
     waveSpawnedFast = 0;
     waveSpawnedTank = 0;
     waveSpawnedElite = 0;
+    waveSpawnedMiniBoss = 0;
     allWavesComplete = false;
 
     // Initialize enemy pointers
@@ -27,48 +28,56 @@ Game::Game() {
     }
 
     // Initialize all level wave arrays to zero
+    //                         basic, fast, tank, elite, miniBoss, spawnRate
     for (int i = 0; i < MAX_LEVEL; i++) {
         levels[i].numWaves = 0;
         for (int j = 0; j < MAX_WAVES; j++) {
-            levels[i].waves[j] = {0, 0, 0, 0, 15};
+            levels[i].waves[j] = {0, 0, 0, 0, 0, 15};
         }
     }
 
-    // Level 1: Easy - basic aliens with a few fast
-    //                    basic, fast, tank, elite, spawnRate
-    levels[0].numWaves = 2;
-    levels[0].waves[0] = {15, 3, 0, 0, 15};   // Wave 1: 15 basic, 3 fast
-    levels[0].waves[1] = {10, 5, 0, 0, 12};   // Wave 2: 10 basic, 5 fast
+    // Level 1: Introduction
+    levels[0].numWaves = 8;
+    levels[0].waves[0] = {50, 0, 0, 0, 0, 6};    // Wave 1: 50 basic
+    levels[0].waves[1] = {0, 10, 0, 0, 0, 3};    // Wave 2: 10 fast
+    levels[0].waves[2] = {50, 20, 0, 0, 0, 5};   // Wave 3: 50 basic + 20 fast
+    levels[0].waves[3] = {0, 10, 0, 0, 0, 3};    // Wave 4: 10 fast
+    levels[0].waves[4] = {30, 0, 0, 0, 0, 6};    // Wave 5: 30 basic
+    levels[0].waves[5] = {0, 10, 0, 0, 0, 3};    // Wave 6: 10 fast
+    levels[0].waves[6] = {20, 10, 0, 0, 0, 5};   // Wave 7: 20 basic + 10 fast
+    levels[0].waves[7] = {0, 0, 0, 0, 1, 15};    // Wave 8: mini-boss
 
     // Level 2: Introducing tanks
     levels[1].numWaves = 2;
-    levels[1].waves[0] = {10, 5, 2, 0, 12};   // Wave 1: 10 basic, 5 fast, 2 tanks
-    levels[1].waves[1] = {8, 8, 3, 0, 10};    // Wave 2: 8 basic, 8 fast, 3 tanks
+    levels[1].waves[0] = {10, 5, 2, 0, 0, 12};
+    levels[1].waves[1] = {8, 8, 3, 0, 0, 10};
 
     // Level 3: Introducing elites
     levels[2].numWaves = 3;
-    levels[2].waves[0] = {10, 5, 2, 0, 12};   // Wave 1: basics and fast
-    levels[2].waves[1] = {5, 5, 3, 2, 10};    // Wave 2: mixed with elites
-    levels[2].waves[2] = {5, 8, 2, 3, 8};     // Wave 3: more elites
+    levels[2].waves[0] = {10, 5, 2, 0, 0, 12};
+    levels[2].waves[1] = {5, 5, 3, 2, 0, 10};
+    levels[2].waves[2] = {5, 8, 2, 3, 0, 8};
 
     // Level 4: Tough
     levels[3].numWaves = 3;
-    levels[3].waves[0] = {8, 10, 3, 2, 10};   // Wave 1: fast-heavy
-    levels[3].waves[1] = {5, 5, 5, 5, 8};     // Wave 2: balanced tough
-    levels[3].waves[2] = {3, 10, 4, 5, 7};    // Wave 3: elite and fast rush
+    levels[3].waves[0] = {8, 10, 3, 2, 0, 10};
+    levels[3].waves[1] = {5, 5, 5, 5, 0, 8};
+    levels[3].waves[2] = {3, 10, 4, 5, 0, 7};
 
     // Level 5: Final challenge
     levels[4].numWaves = 4;
-    levels[4].waves[0] = {5, 10, 3, 3, 10};   // Wave 1: fast swarm
-    levels[4].waves[1] = {3, 5, 5, 5, 8};     // Wave 2: tank wall
-    levels[4].waves[2] = {5, 10, 4, 6, 7};    // Wave 3: elite assault
-    levels[4].waves[3] = {3, 8, 5, 8, 6};     // Wave 4: everything
+    levels[4].waves[0] = {5, 10, 3, 3, 0, 10};
+    levels[4].waves[1] = {3, 5, 5, 5, 0, 8};
+    levels[4].waves[2] = {5, 10, 4, 6, 0, 7};
+    levels[4].waves[3] = {3, 8, 5, 8, 0, 6};
 
-    // Level 6: Boss fight - no regular waves, boss handles minion spawning
+    // Level 6: Boss fight
     levels[5].numWaves = 1;
-    levels[5].waves[0] = {0, 0, 0, 0, 999};
+    levels[5].waves[0] = {0, 0, 0, 0, 0, 999};
 
     bossActive = false;
+    bossSwarmSpawned = false;
+    bossSwarmRemaining = 0;
 }
 
 Game::~Game() {
@@ -110,8 +119,11 @@ void Game::setup() {
     waveSpawnedFast = 0;
     waveSpawnedTank = 0;
     waveSpawnedElite = 0;
+    waveSpawnedMiniBoss = 0;
     allWavesComplete = false;
     bossActive = false;
+    bossSwarmSpawned = false;
+    bossSwarmRemaining = 0;
 }
 
 void Game::update(const InputState& input, RGBMatrix *matrix, int clock) {
@@ -125,13 +137,23 @@ void Game::update(const InputState& input, RGBMatrix *matrix, int clock) {
         drawLevelSelectMenu(matrix);
         return;
     } else if (gameState == VICTORY || gameState == GAME_OVER) {
-        if (gameState == VICTORY) drawVictoryScreen(matrix);
-        else drawGameOverScreen(matrix);
-
         if (levelDisplayTimer > 0) {
+            // Clear screen but let player fly around
             levelDisplayTimer--;
+            player.erase(matrix);
+            for (int ey = 0; ey < 64; ey++)
+                for (int ex = 0; ex < 64; ex++)
+                    matrix->SetPixel(ey, ex, 18, 10, 14);
+            // Move ship but don't fire
+            player.move(input.joystick_x, input.joystick_y, clock);
+            player.draw(matrix);
+            drawHUD(matrix, input.potentiometer);
             return;
         }
+
+        // Show text after idle
+        if (gameState == VICTORY) drawVictoryScreen(matrix);
+        else drawGameOverScreen(matrix);
         // Require a fresh press of any button (must release first, then press)
         bool anyPressed = input.button1 || input.button2 || input.button3;
         bool anyWasPressed = lastButton1;  // reuse as "any button was held"
@@ -140,6 +162,7 @@ void Game::update(const InputState& input, RGBMatrix *matrix, int clock) {
             setup();
             gameState = MAIN_MENU;
             lastButton1 = true;
+            joystickDebounceTimer = 30;  // Prevent instant menu selection
         }
         return;
     } else if (gameState != PLAYING) {
@@ -231,7 +254,7 @@ void Game::update(const InputState& input, RGBMatrix *matrix, int clock) {
     // Check if player is dead
     if (player.get_health() <= 0) {
         gameState = GAME_OVER;
-        levelDisplayTimer = 25;  // Brief pause before accepting input
+        levelDisplayTimer = 100;  // Idle on empty screen then show text
         return;
     }
 
@@ -299,38 +322,21 @@ void Game::spawnEnemy(int clock) {
             // Spawn boss
             for (int i = 0; i < MAX_ENEMIES; i++) {
                 if (enemies[i] == nullptr) {
-                    enemies[i] = new BossAlien(32, -10);
+                    enemies[i] = new BossAlien(32, -12);
                     bossActive = true;
                     break;
                 }
             }
-        } else {
-            // Check if boss wants to spawn minions
+        }
+
+        // Phase 3 swarm spawning - spawn fast aliens gradually
+        if (bossSwarmRemaining > 0 && clock - lastSpawnTime > 8) {
             for (int i = 0; i < MAX_ENEMIES; i++) {
-                if (enemies[i] != nullptr && enemies[i]->getType() == BOSS && enemies[i]->get_health() > 0) {
-                    BossAlien* boss = dynamic_cast<BossAlien*>(enemies[i]);
-                    if (boss && boss->shouldSpawnMinion()) {
-                        // Count existing minions
-                        int minionCount = 0;
-                        for (int k = 0; k < MAX_ENEMIES; k++) {
-                            if (enemies[k] != nullptr && enemies[k]->getType() != BOSS && enemies[k]->get_health() > 0)
-                                minionCount++;
-                        }
-                        if (minionCount < 5) {
-                            for (int j = 0; j < MAX_ENEMIES; j++) {
-                                if (enemies[j] == nullptr) {
-                                    int rx = 10 + (rand() % 44);
-                                    if (boss->getPhase() == 3) {
-                                        enemies[j] = new FastAlien(rx, -8);
-                                    } else {
-                                        enemies[j] = new BasicAlien(rx, -8);
-                                    }
-                                    break;
-                                }
-                            }
-                        }
-                        boss->resetMinionCooldown();
-                    }
+                if (enemies[i] == nullptr) {
+                    int rx = 5 + (rand() % 54);
+                    enemies[i] = new FastAlien(rx, -5);
+                    bossSwarmRemaining--;
+                    lastSpawnTime = clock;
                     break;
                 }
             }
@@ -352,13 +358,22 @@ void Game::spawnEnemy(int clock) {
     if (waveSpawnedBasic >= wave.basicCount &&
         waveSpawnedFast >= wave.fastCount &&
         waveSpawnedTank >= wave.tankCount &&
-        waveSpawnedElite >= wave.eliteCount) {
+        waveSpawnedElite >= wave.eliteCount &&
+        waveSpawnedMiniBoss >= wave.miniBossCount) {
+        // Wait for all enemies to clear before next wave
+        bool anyAlive = false;
+        for (int i = 0; i < MAX_ENEMIES; i++) {
+            if (enemies[i] != nullptr) { anyAlive = true; break; }
+        }
+        if (anyAlive) return;  // Wait for screen to clear
+
         // Advance to next wave
         currentWave++;
         waveSpawnedBasic = 0;
         waveSpawnedFast = 0;
         waveSpawnedTank = 0;
         waveSpawnedElite = 0;
+        waveSpawnedMiniBoss = 0;
         if (currentWave >= level.numWaves) {
             allWavesComplete = true;
         }
@@ -418,6 +433,10 @@ void Game::spawnEnemy(int clock) {
                         enemies[i] = new EliteAlien(randomX, spawnY);
                         waveSpawnedElite++;
                         break;
+                    case MINI_BOSS:
+                        enemies[i] = new MiniBossAlien(32, spawnY);  // Center spawn
+                        waveSpawnedMiniBoss++;
+                        break;
                 }
 
                 lastSpawnTime = clock;
@@ -445,9 +464,11 @@ void Game::updateEnemies(int clock) {
 
         // Boss death: spawn multiple explosions across its body
         if (enemies[i]->getType() == BOSS && enemies[i]->get_health() == 0) {
-            if (clock % 3 == 0) {
-                int ex = enemies[i]->get_x() + (rand() % 20) - 10;
-                int ey = enemies[i]->get_y() + (rand() % 14) - 7;
+            anyEnemiesAlive = true;  // Keep boss "alive" during death sequence
+            BossAlien* dyingBoss = dynamic_cast<BossAlien*>(enemies[i]);
+            if (dyingBoss && dyingBoss->wantsExplosion()) {
+                int ex = enemies[i]->get_x() + (rand() % 24) - 12;
+                int ey = enemies[i]->get_y() + (rand() % 16) - 8;
                 addExplosion(ex, ey);
             }
         }
@@ -466,12 +487,15 @@ void Game::updateEnemies(int clock) {
                 moveFrequency = 3;  // TANK enemies move every 3 frames
             } else if (enemies[i]->getType() == ELITE) {
                 moveFrequency = 2;  // ELITE enemies move every 2 frames
+            } else if (enemies[i]->getType() == MINI_BOSS) {
+                moveFrequency = 3;
             } else if (enemies[i]->getType() == BOSS) {
                 BossAlien* boss = dynamic_cast<BossAlien*>(enemies[i]);
                 if (boss) {
                     if (boss->getPhase() == 1) moveFrequency = 3;
                     else if (boss->getPhase() == 2) moveFrequency = 2;
-                    else moveFrequency = 1;
+                    else if (boss->getPhase() == 3) moveFrequency = 3;  // Slow during swarm
+                    else moveFrequency = 1;  // Phase 4 - fast
                 }
             }
 
@@ -493,7 +517,7 @@ void Game::updateEnemies(int clock) {
 
             // Remove enemy only when fully scrolled off bottom
             // Tank extends +3 below center, others +2 max
-            int bottomMargin = (enemies[i]->getType() == TANK) ? 4 : 3;
+            int bottomMargin = (enemies[i]->getType() == TANK) ? 4 : (enemies[i]->getType() == MINI_BOSS) ? 5 : 3;
             if (enemies[i]->get_y() > 63 + bottomMargin) {
                 delete enemies[i];
                 enemies[i] = nullptr;
@@ -504,25 +528,55 @@ void Game::updateEnemies(int clock) {
         }
     }
 
-    // Boss fight: check if boss is dead
+    // Boss fight logic
     if (currentLevel == 6) {
-        if (bossActive) {
-            bool bossExists = false;
-            for (int i = 0; i < MAX_ENEMIES; i++) {
-                if (enemies[i] != nullptr && enemies[i]->getType() == BOSS) {
-                    bossExists = true;
-                    break;
-                }
-            }
-            if (!bossExists) {
-                bossActive = false;
-                allWavesComplete = true;  // Prevent respawning
+        // Find the boss
+        BossAlien* boss = nullptr;
+        for (int i = 0; i < MAX_ENEMIES; i++) {
+            if (enemies[i] != nullptr && enemies[i]->getType() == BOSS && enemies[i]->get_health() > 0) {
+                boss = dynamic_cast<BossAlien*>(enemies[i]);
+                break;
             }
         }
-        // Once boss is gone, wait for all minions to clear
+
+        // Phase 3: trigger swarm spawn
+        if (boss && boss->getPhase() == 3 && !bossSwarmSpawned) {
+            bossSwarmSpawned = true;
+            bossSwarmRemaining = 40;
+        }
+
+        // Phase 3 -> 4: check if swarm is cleared
+        if (boss && boss->getPhase() == 3 && bossSwarmSpawned && bossSwarmRemaining == 0) {
+            // Count non-boss enemies still alive
+            int swarmAlive = 0;
+            for (int i = 0; i < MAX_ENEMIES; i++) {
+                if (enemies[i] != nullptr && enemies[i]->getType() != BOSS) swarmAlive++;
+            }
+            if (swarmAlive == 0) {
+                boss->setPhase(4);
+                bossSwarmSpawned = false;
+            }
+        }
+
+        // Check if boss is dead
+        if (bossActive && !boss) {
+            bossActive = false;
+            bossSwarmSpawned = false;
+            bossSwarmRemaining = 0;
+            allWavesComplete = true;
+        }
+
+        // Once boss is gone, wait for all enemies AND explosions to clear
         if (!bossActive && allWavesComplete && !anyEnemiesAlive) {
-            gameState = VICTORY;
-            levelDisplayTimer = 25;  // Brief pause before accepting input
+            // Check no active explosions remain
+            bool explosionsActive = false;
+            for (int i = 0; i < MAX_EXPLOSIONS; i++) {
+                if (explosions[i].active) { explosionsActive = true; break; }
+            }
+            if (!explosionsActive) {
+                gameState = VICTORY;
+                levelDisplayTimer = 100;  // Idle on empty screen then show text
+            }
         }
         return;
     }
@@ -584,8 +638,9 @@ void Game::checkCollisions(int clock) {
             // Check collision (bullet within range of enemy center)
             int dx = bx - ex;
             int dy = by - ey;
-            int hitRangeX = (enemies[j]->getType() == BOSS) ? 13 : 2;
-            int hitRangeY = (enemies[j]->getType() == BOSS) ? 10 : 2;
+            AlienType ht = enemies[j]->getType();
+            int hitRangeX = (ht == BOSS) ? 13 : (ht == MINI_BOSS) ? 5 : 2;
+            int hitRangeY = (ht == BOSS) ? 10 : (ht == MINI_BOSS) ? 4 : 2;
 
             if (dx >= -hitRangeX && dx <= hitRangeX && dy >= -hitRangeY && dy <= hitRangeY) {
                 // Boss weak point check: after shield is down, only weak points take damage
@@ -593,21 +648,19 @@ void Game::checkCollisions(int clock) {
                     BossAlien* boss = dynamic_cast<BossAlien*>(enemies[j]);
                     if (boss && boss->getShield() <= 0) {
                         // Check if bullet hits a weak point (3 points with radius 3)
-                        // Left: (ex-7, ey+3), Center: (ex, ey+7), Right: (ex+7, ey+3)
+                        // Left: (ex-9, ey+5), Center: (ex, ey+6), Right: (ex+9, ey+5)
                         bool hitWeak = false;
                         int wpRadius = 3;
-                        if (abs(bx - (ex - 7)) <= wpRadius && abs(by - (ey + 3)) <= wpRadius) hitWeak = true;
-                        if (abs(bx - ex) <= wpRadius && abs(by - (ey + 7)) <= wpRadius) hitWeak = true;
-                        if (abs(bx - (ex + 7)) <= wpRadius && abs(by - (ey + 3)) <= wpRadius) hitWeak = true;
+                        if (abs(bx - (ex - 9)) <= wpRadius && abs(by - (ey + 5)) <= wpRadius) hitWeak = true;
+                        if (abs(bx - ex) <= wpRadius && abs(by - (ey + 6)) <= wpRadius) hitWeak = true;
+                        if (abs(bx - (ex + 9)) <= wpRadius && abs(by - (ey + 5)) <= wpRadius) hitWeak = true;
                         if (!hitWeak) {
-                            bullets[i].deactivate();  // Bullet absorbed by armor
-                            break;
+                            break;  // Missed weak point, bullet passes through
                         }
                     }
                 }
                 // Weak point hits deal double damage
-                bool isBossWeak = (enemies[j]->getType() == BOSS && shield <= 0);
-                // Need to check shield via cast
+                bool isBossWeak = false;
                 if (enemies[j]->getType() == BOSS) {
                     BossAlien* bcheck = dynamic_cast<BossAlien*>(enemies[j]);
                     isBossWeak = (bcheck && bcheck->getShield() <= 0);
@@ -654,7 +707,7 @@ void Game::checkCollisions(int clock) {
             
             // Check if enemy is in laser beam
             int dx = ex - laserX;
-            int laserHitRange = (enemies[j]->getType() == BOSS) ? 10 : 1;
+            int laserHitRange = (enemies[j]->getType() == BOSS) ? 10 : (enemies[j]->getType() == MINI_BOSS) ? 4 : 1;
 
             if (dx >= -laserHitRange && dx <= laserHitRange && ey < laserY && ey >= 0) {
                 // Boss weak point check for laser
@@ -663,9 +716,9 @@ void Game::checkCollisions(int clock) {
                     if (boss && boss->getShield() <= 0) {
                         // Laser must hit near a weak point x-position
                         bool hitWeak = false;
-                        if (abs(laserX - (ex - 7)) <= 3) hitWeak = true;
+                        if (abs(laserX - (ex - 9)) <= 3) hitWeak = true;
                         if (abs(laserX - ex) <= 3) hitWeak = true;
-                        if (abs(laserX - (ex + 7)) <= 3) hitWeak = true;
+                        if (abs(laserX - (ex + 9)) <= 3) hitWeak = true;
                         if (!hitWeak) continue;
                     }
                 }
@@ -696,7 +749,7 @@ void Game::checkCollisions(int clock) {
         // Check collision (ship within range of enemy)
         int dx = px - ex;
         int dy = py - ey;
-        int shipHitRange = (enemies[j]->getType() == BOSS) ? 13 : 3;
+        int shipHitRange = (enemies[j]->getType() == BOSS) ? 13 : (enemies[j]->getType() == MINI_BOSS) ? 5 : 3;
 
         if (dx >= -shipHitRange && dx <= shipHitRange && dy >= -shipHitRange && dy <= shipHitRange) {
             if (enemies[j]->getType() == BOSS) {
@@ -805,8 +858,11 @@ void Game::advanceLevel() {
     waveSpawnedFast = 0;
     waveSpawnedTank = 0;
     waveSpawnedElite = 0;
+    waveSpawnedMiniBoss = 0;
     allWavesComplete = false;
     bossActive = false;
+    bossSwarmSpawned = false;
+    bossSwarmRemaining = 0;
 
     levelDisplayTimer = 100;  // Show new level for 100 ticks
     levelStartDelay = 150;  // 1.5 second delay before starting
@@ -830,12 +886,13 @@ AlienType Game::selectWaveAlienType() {
     Wave& wave = level.waves[currentWave];
 
     // Build list of types that still need spawning
-    AlienType available[4];
+    AlienType available[5];
     int count = 0;
     if (waveSpawnedBasic < wave.basicCount) available[count++] = BASIC;
     if (waveSpawnedFast < wave.fastCount) available[count++] = FAST;
     if (waveSpawnedTank < wave.tankCount) available[count++] = TANK;
     if (waveSpawnedElite < wave.eliteCount) available[count++] = ELITE;
+    if (waveSpawnedMiniBoss < wave.miniBossCount) available[count++] = MINI_BOSS;
 
     if (count == 0) return BASIC;  // Shouldn't happen
 
@@ -866,9 +923,11 @@ void Game::drawLevelDisplay(RGBMatrix *matrix, int clock) {
 
 void Game::updateMenu(const InputState& input) {
     // Detect button press (only trigger on press, not hold)
-    bool button1Pressed = input.button1 && !lastButton1;
-    lastButton1 = input.button1;
-    bool buttonPressed = button1Pressed || input.button2;  // Either button can select
+    // Any of the 3 buttons can select (edge-detected via lastButton1 tracking any press)
+    bool anyNow = input.button1 || input.button2 || input.button3;
+    bool anyPrev = lastButton1;
+    lastButton1 = anyNow;
+    bool buttonPressed = anyNow && !anyPrev;
     
     // Decrement debounce timer
     if (joystickDebounceTimer > 0) {
@@ -912,21 +971,26 @@ void Game::updateMenu(const InputState& input) {
                 joystickDebounceTimer = 6;  // Prevent rapid changes
             } else if (input.joystick_y > 50) {  // Down
                 levelSelectChoice = (levelSelectChoice + 1);
-                if (levelSelectChoice > MAX_LEVEL) levelSelectChoice = MAX_LEVEL;
+                if (levelSelectChoice > MAX_LEVEL + 1) levelSelectChoice = MAX_LEVEL + 1;  // +1 for BACK
                 joystickDebounceTimer = 6;  // Prevent rapid changes
             }
         }
         
         // Select with button1, back with button3 (only if not in debounce)
         if (buttonPressed && joystickDebounceTimer == 0) {
-            int selectedLevel = levelSelectChoice;  // Save selected level
-            setup();
-            currentLevel = selectedLevel;  // Restore selected level after setup()
-            levelSelectChoice = selectedLevel;  // Keep highlight correct
-            levelDisplayTimer = 100;
-            levelStartDelay = 150;  // 1.5 seconds at 100fps
-            levelActive = false;
-            gameState = PLAYING;
+            if (levelSelectChoice == MAX_LEVEL + 1) {
+                // BACK selected
+                gameState = MAIN_MENU;
+            } else {
+                int selectedLevel = levelSelectChoice;
+                setup();
+                currentLevel = selectedLevel;
+                levelSelectChoice = selectedLevel;
+                levelDisplayTimer = 100;
+                levelStartDelay = 150;
+                levelActive = false;
+                gameState = PLAYING;
+            }
         } else if (input.button3 && joystickDebounceTimer == 0) {
             gameState = MAIN_MENU;
         }
@@ -1047,6 +1111,23 @@ void Game::drawText(RGBMatrix *matrix, const char* text, int x, int y, int r, in
             for (int j = 0; j < 5; j++) safeSetPixel(y + j, charX, r, g, b);
             safeSetPixel(y, charX + 1, r, g, b);
             safeSetPixel(y + 1, charX + 1, r, g, b);
+        } else if (c == 'B') {
+            for (int j = 0; j < 5; j++) safeSetPixel(y + j, charX + 2, r, g, b);
+            safeSetPixel(y, charX + 1, r, g, b);
+            safeSetPixel(y, charX, r, g, b);
+            safeSetPixel(y + 1, charX, r, g, b);
+            safeSetPixel(y + 2, charX + 1, r, g, b);
+            safeSetPixel(y + 2, charX, r, g, b);
+            safeSetPixel(y + 3, charX, r, g, b);
+            safeSetPixel(y + 4, charX + 1, r, g, b);
+            safeSetPixel(y + 4, charX, r, g, b);
+        } else if (c == 'K') {
+            for (int j = 0; j < 5; j++) safeSetPixel(y + j, charX + 2, r, g, b);
+            safeSetPixel(y, charX, r, g, b);
+            safeSetPixel(y + 1, charX + 1, r, g, b);
+            safeSetPixel(y + 2, charX + 1, r, g, b);
+            safeSetPixel(y + 3, charX + 1, r, g, b);
+            safeSetPixel(y + 4, charX, r, g, b);
         } else if (c == 'R') {
             for (int j = 0; j < 5; j++) safeSetPixel(y + j, charX + 2, r, g, b);
             safeSetPixel(y, charX + 1, r, g, b);
@@ -1146,25 +1227,54 @@ void Game::drawLevelSelectMenu(RGBMatrix *matrix) {
     // Draw title
     drawText(matrix, "SELECT", 10, 5, 255, 255, 255);
     
-    // Draw levels on separate rows (0 = free fly, 1-5 = combat levels)
+    // Draw levels on separate rows (0 = free fly, 1-6 = combat levels, -1 = back)
     int startX = 15;
     for (int i = 0; i <= MAX_LEVEL; i++) {
         char levelStr[2] = {(char)('0' + i), '\0'};
-        int rowY = 15 + i * 7;  // Each level on its own row
+        int rowY = 15 + i * 7;
         if (i == levelSelectChoice) {
-            drawText(matrix, levelStr, startX, rowY, 255, 255, 0);  // Yellow for selected
+            drawText(matrix, levelStr, startX, rowY, 255, 255, 0);
         } else {
-            drawText(matrix, levelStr, startX, rowY, 100, 100, 100);  // Gray for unselected
+            drawText(matrix, levelStr, startX, rowY, 100, 100, 100);
         }
+    }
+    // BACK option at bottom-right
+    if (levelSelectChoice == MAX_LEVEL + 1) {
+        drawText(matrix, "BACK", 44, 57, 255, 255, 0);
+    } else {
+        drawText(matrix, "BACK", 44, 57, 100, 100, 100);
     }
 }
 
 void Game::updateEnemyBullets() {
+    int px = player.get_x();
+    int py = player.get_y();
+    static int homingFrame = 0;
+    homingFrame++;
+
     // Update all enemy bullets
     for (int i = 0; i < MAX_ENEMY_BULLETS; i++) {
         if (enemyBullets[i].isActive()) {
+            // Homing missiles — steer toward player, move every 2nd frame
+            if (enemyBullets[i].getHoming()) {
+                int bx = enemyBullets[i].getX();
+                // Steer toward player
+                if (bx < px - 2) enemyBullets[i].setDx(1);
+                else if (bx > px + 2) enemyBullets[i].setDx(-1);
+                else enemyBullets[i].setDx(0);
+
+                // Use bullet's own Y position (odd/even) to throttle
+                // Both missiles use the same global frame counter
+                if (homingFrame % 2 == 0) {
+                    enemyBullets[i].setDy(1);
+                } else {
+                    enemyBullets[i].setDy(0);
+                    enemyBullets[i].setDx(0);
+                }
+            }
+
             enemyBullets[i].update();
-            
+
             // Deactivate if off screen
             if (enemyBullets[i].getY() > 63 || enemyBullets[i].getY() < 0 ||
                 enemyBullets[i].getX() > 63 || enemyBullets[i].getX() < 0) {
@@ -1178,13 +1288,32 @@ void Game::updateEnemyBullets() {
         if (enemies[i] != nullptr && enemies[i]->getType() == ELITE && enemies[i]->get_health() > 0) {
             EliteAlien* elite = dynamic_cast<EliteAlien*>(enemies[i]);
             if (elite && elite->shouldShoot()) {
-                // Find an inactive bullet slot
                 for (int j = 0; j < MAX_ENEMY_BULLETS; j++) {
                     if (!enemyBullets[j].isActive()) {
-                        // Fire fast violet bullet downward from elite position
                         enemyBullets[j] = Bullet(elite->get_x(), elite->get_y() + 3, 0, 3, 140, 50, 160);
                         elite->resetShotCooldown();
                         break;
+                    }
+                }
+            }
+        }
+        // Make mini-boss shoot homing missiles from turret
+        if (enemies[i] != nullptr && enemies[i]->getType() == MINI_BOSS && enemies[i]->get_health() > 0) {
+            MiniBossAlien* mb = dynamic_cast<MiniBossAlien*>(enemies[i]);
+            if (mb) {
+                // Update turret tracking toward player
+                mb->updateTurret(px);
+
+                if (mb->shouldShoot()) {
+                    int turretX = mb->get_x() + mb->getTurretX();
+                    for (int j = 0; j < MAX_ENEMY_BULLETS; j++) {
+                        if (!enemyBullets[j].isActive()) {
+                            // Fire from turret tip position
+                            enemyBullets[j] = Bullet(turretX, mb->get_y() + 3, 0, 1, 200, 50, 80);
+                            enemyBullets[j].setHoming(true);
+                            mb->resetShotCooldown();
+                            break;
+                        }
                     }
                 }
             }
@@ -1201,11 +1330,20 @@ void Game::updateEnemyBullets() {
                 int bossPhase = boss->getPhase();
 
                 if (bossPhase == 1) {
-                    // Single aimed bullet
-                    for (int j = 0; j < MAX_ENEMY_BULLETS; j++) {
+                    // Scatter shot - 6 bullets in a downward fan
+                    int dirs[6][2] = {
+                        {0, 2},    // Straight down
+                        {-1, 2},   // Down-left
+                        {1, 2},    // Down-right
+                        {-2, 1},   // Wide left
+                        {2, 1},    // Wide right
+                        {0, 1}     // Slow center
+                    };
+                    int spawned = 0;
+                    for (int j = 0; j < MAX_ENEMY_BULLETS && spawned < 6; j++) {
                         if (!enemyBullets[j].isActive()) {
-                            enemyBullets[j] = Bullet(bx, by + 9, 0, 3, 140, 50, 160);
-                            break;
+                            enemyBullets[j] = Bullet(bx, by + 9, dirs[spawned][0], dirs[spawned][1], 180, 25, 25);
+                            spawned++;
                         }
                     }
                 } else if (bossPhase == 2) {
@@ -1218,17 +1356,57 @@ void Game::updateEnemyBullets() {
                             spawned++;
                         }
                     }
-                } else {
-                    // Rapid single fast bullet
-                    for (int j = 0; j < MAX_ENEMY_BULLETS; j++) {
+                    // Also fire 2 slow homing missiles from the pincers
+                    int homingSpawned = 0;
+                    for (int j = 0; j < MAX_ENEMY_BULLETS && homingSpawned < 2; j++) {
                         if (!enemyBullets[j].isActive()) {
-                            enemyBullets[j] = Bullet(bx, by + 9, 0, 4, 180, 70, 190);
-                            break;
+                            int hx = (homingSpawned == 0) ? bx - 9 : bx + 9;
+                            enemyBullets[j] = Bullet(hx, by + 7, 0, 1, 200, 40, 40);
+                            enemyBullets[j].setHoming(true);
+                            enemyBullets[j].setLarge(true);
+                            homingSpawned++;
                         }
                     }
+                } else {
+                    // Phase 4: alternate scatter and beam
+                    if (boss->getAttackPattern() == 0) {
+                        // Powerful scatter - 10 bullets in wide fan
+                        int dirs[10][2] = {
+                            {0, 3},    // Straight down fast
+                            {-1, 3},   // Down-left
+                            {1, 3},    // Down-right
+                            {-2, 2},   // Wide left
+                            {2, 2},    // Wide right
+                            {-3, 1},   // Very wide left
+                            {3, 1},    // Very wide right
+                            {0, 2},    // Slow center
+                            {-1, 2},   // Slow left
+                            {1, 2}     // Slow right
+                        };
+                        int spawned = 0;
+                        for (int j = 0; j < MAX_ENEMY_BULLETS && spawned < 10; j++) {
+                            if (!enemyBullets[j].isActive()) {
+                                enemyBullets[j] = Bullet(bx, by + 9, dirs[spawned][0], dirs[spawned][1], 220, 40, 40);
+                                spawned++;
+                            }
+                        }
+                    }
+                    // Beam attack is handled separately below (continuous)
                 }
                 boss->resetShotCooldown();
             }
+
+            // Beam damage (rendering handled in drawEnemyBullets)
+            if (boss->getBeamTimer() > 0) {
+                int beamX = boss->get_x();
+                int beamStartY = boss->get_y() + 9;
+                int px = player.get_x();
+                int py = player.get_y();
+                if (abs(px - beamX) <= 2 && py > beamStartY) {
+                    player.takeDamage(3);
+                }
+            }
+
             break;
         }
     }
@@ -1238,13 +1416,73 @@ void Game::drawEnemyBullets(RGBMatrix *matrix) {
     for (int i = 0; i < MAX_ENEMY_BULLETS; i++) {
         if (enemyBullets[i].isActive()) {
             enemyBullets[i].draw(matrix);
-            // Draw elongated trail behind bullet (above, since bullets move down)
-            int bx = enemyBullets[i].getX();
-            int by = enemyBullets[i].getY();
-            if (by - 1 >= 0 && by - 1 < 64 && bx >= 0 && bx < 64)
-                matrix->SetPixel(by - 1, bx, 100, 35, 120);  // dimmer violet trail
-            if (by - 2 >= 0 && by - 2 < 64 && bx >= 0 && bx < 64)
-                matrix->SetPixel(by - 2, bx, 60, 20, 75);    // fading tail
+            // Homing missiles: 2px tall, 1px wide (trail pixel behind)
+            if (enemyBullets[i].getHoming()) {
+                int bx = enemyBullets[i].getX();
+                int by = enemyBullets[i].getY();
+                if (by - 1 >= 0 && by - 1 < 64 && bx >= 0 && bx < 64)
+                    matrix->SetPixel(by - 1, bx, 140, 35, 55);  // Dimmer trail pixel
+            }
+            // Only draw trail for fast straight bullets (elite/boss phase 3)
+            if (enemyBullets[i].getDy() >= 3 && !enemyBullets[i].getHoming()) {
+                int bx = enemyBullets[i].getX();
+                int by = enemyBullets[i].getY();
+                if (by - 1 >= 0 && by - 1 < 64 && bx >= 0 && bx < 64)
+                    matrix->SetPixel(by - 1, bx, 100, 35, 120);
+                if (by - 2 >= 0 && by - 2 < 64 && bx >= 0 && bx < 64)
+                    matrix->SetPixel(by - 2, bx, 60, 20, 75);
+            }
+        }
+    }
+
+    // Draw boss beam charge + beam attack
+    for (int i = 0; i < MAX_ENEMIES; i++) {
+        if (enemies[i] != nullptr && enemies[i]->getType() == BOSS && enemies[i]->get_health() > 0) {
+            BossAlien* boss = dynamic_cast<BossAlien*>(enemies[i]);
+            if (!boss) break;
+            int beamX = boss->get_x();
+            int gunY = boss->get_y() + 8;
+
+            // Charging animation — growing energy ball at gun tip
+            int charge = boss->getBeamChargeTimer();
+            if (charge > 0) {
+                int intensity = (20 - charge) * 12;  // 0 to 240
+                if (intensity > 255) intensity = 255;
+                int pulse = ((charge % 2) == 0) ? 40 : 0;
+                // Flickering charge point
+                if (gunY >= 0 && gunY < 64 && beamX >= 0 && beamX < 64)
+                    matrix->SetPixel(gunY, beamX, intensity + pulse > 255 ? 255 : intensity + pulse, 30, 30);
+                // Growing glow around charge point
+                if (charge < 15) {
+                    if (gunY + 1 < 64 && beamX >= 0 && beamX < 64)
+                        matrix->SetPixel(gunY + 1, beamX, intensity / 2, 15, 20);
+                    if (beamX - 1 >= 0 && gunY >= 0 && gunY < 64)
+                        matrix->SetPixel(gunY, beamX - 1, intensity / 3, 10, 15);
+                    if (beamX + 1 < 64 && gunY >= 0 && gunY < 64)
+                        matrix->SetPixel(gunY, beamX + 1, intensity / 3, 10, 15);
+                }
+                // Warning line preview (faint dashed line)
+                if (charge < 10) {
+                    for (int row = gunY + 2; row < 64; row += 3) {
+                        if (beamX >= 0 && beamX < 64 && row < 64)
+                            matrix->SetPixel(row, beamX, intensity / 4, 8, 10);
+                    }
+                }
+            }
+
+            // Active beam
+            if (boss->getBeamTimer() > 0) {
+                for (int row = gunY; row < 64; row++) {
+                    int flicker = (rand() % 3 == 0) ? 30 : 0;
+                    if (beamX - 1 >= 0 && beamX - 1 < 64 && row >= 0 && row < 64)
+                        matrix->SetPixel(row, beamX - 1, 150 + flicker, 20, 30 + flicker);
+                    if (beamX >= 0 && beamX < 64 && row >= 0 && row < 64)
+                        matrix->SetPixel(row, beamX, 255, 50 + flicker, 60 + flicker);
+                    if (beamX + 1 >= 0 && beamX + 1 < 64 && row >= 0 && row < 64)
+                        matrix->SetPixel(row, beamX + 1, 150 + flicker, 20, 30 + flicker);
+                }
+            }
+            break;
         }
     }
 }
@@ -1253,13 +1491,22 @@ void Game::eraseEnemyBullets(RGBMatrix *matrix) {
     for (int i = 0; i < MAX_ENEMY_BULLETS; i++) {
         if (enemyBullets[i].isActive()) {
             enemyBullets[i].erase(matrix);
-            // Erase trail pixels too
-            int bx = enemyBullets[i].getX();
-            int by = enemyBullets[i].getY();
-            if (by - 1 >= 0 && by - 1 < 64 && bx >= 0 && bx < 64)
-                matrix->SetPixel(by - 1, bx, 18, 10, 14);
-            if (by - 2 >= 0 && by - 2 < 64 && bx >= 0 && bx < 64)
-                matrix->SetPixel(by - 2, bx, 18, 10, 14);
+            // Erase homing trail pixel
+            if (enemyBullets[i].getHoming()) {
+                int bx = enemyBullets[i].getX();
+                int by = enemyBullets[i].getY();
+                if (by - 1 >= 0 && by - 1 < 64 && bx >= 0 && bx < 64)
+                    matrix->SetPixel(by - 1, bx, 18, 10, 14);
+            }
+            // Erase trail only for fast straight bullets
+            if (enemyBullets[i].getDy() >= 3 && !enemyBullets[i].getHoming()) {
+                int bx = enemyBullets[i].getX();
+                int by = enemyBullets[i].getY();
+                if (by - 1 >= 0 && by - 1 < 64 && bx >= 0 && bx < 64)
+                    matrix->SetPixel(by - 1, bx, 18, 10, 14);
+                if (by - 2 >= 0 && by - 2 < 64 && bx >= 0 && bx < 64)
+                    matrix->SetPixel(by - 2, bx, 18, 10, 14);
+            }
         }
     }
 }

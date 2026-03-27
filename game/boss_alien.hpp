@@ -13,16 +13,22 @@ public:
     void move(int dx, int dy) override;
     void takeDamage(int damage) override;
     void erase(RGBMatrix *matrix) override;
+    void updateDeathAnimation() override;
+    bool isDead() const override;
 
     int getPhase() const;
     int getShield() const;
     bool shouldShoot();
     void resetShotCooldown();
+    int getAttackPattern() const;  // 0 = scatter, 1 = beam
+    int getBeamTimer() const;
+    int getBeamChargeTimer() const;
     bool shouldSpawnMinion();
     void resetMinionCooldown();
     bool isEntryComplete() const;
-    bool wantsExplosion() const;  // Boss requests an explosion effect
-    int getRedIntensity() const;  // How bright the red warning lights are (0-255)
+    bool wantsExplosion() const;
+    int getRedIntensity() const;
+    void setPhase(int p);
 
 private:
     int phase;
@@ -37,8 +43,13 @@ private:
     int frameCounter;
     bool entryComplete;
     int shieldBreakFlash;
-    int redLightIntensity;    // Gradually increases after phase 1
-    bool explosionRequest;    // Set true when boss wants game to spawn explosion
+    int redLightIntensity;
+    bool explosionRequest;
+    int bossDeathTimer;
+    bool bossDying;
+    int attackPattern;        // 0 = scatter, 1 = beam (alternates in phase 4)
+    int beamTimer;            // How long the beam lasts
+    int beamChargeTimer;      // Charging before beam fires
     // Weak points (exposed after shield down) - relative to boss center
     // Left: (x-6, y+2), Center: (x, y+5), Right: (x+6, y+2)
     static const int WEAK_POINT_RADIUS = 2;

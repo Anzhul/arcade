@@ -28,6 +28,13 @@ public:
     void setScatter(bool scatter) { isScatter = scatter; }
     bool getScatter() const { return isScatter; }
 
+    void setHoming(bool h) { isHoming = h; }
+    bool getHoming() const { return isHoming; }
+    void setDx(int newDx) { dx = newDx; }
+    void setDy(int newDy) { dy = newDy; }
+    int getDx() const { return dx; }
+    int getDy() const { return dy; }
+
 private:
     int x, y;       // Position
     int dx, dy;     // Direction/velocity
@@ -36,6 +43,7 @@ private:
     bool isLarge;   // Large bullet (2x2)
     bool isRocket;  // Rocket (explodes on impact)
     bool isScatter; // Scatter shot bullet
+    bool isHoming;  // Slow homing missile
 };
 
 #endif
