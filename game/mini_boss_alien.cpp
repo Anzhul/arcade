@@ -70,7 +70,11 @@ bool MiniBossAlien::shouldShoot() {
 }
 
 void MiniBossAlien::resetShotCooldown() {
-    shotCooldown = 30 + (rand() % 15);  // Faster: every 30-45 frames
+    shotCooldown = 30 + (rand() % 15);
+}
+
+void MiniBossAlien::setShotCooldown(int cd) {
+    shotCooldown = cd;
 }
 
 void MiniBossAlien::takeDamage(int damage) {
@@ -92,9 +96,9 @@ void MiniBossAlien::takeDamage(int damage) {
 void MiniBossAlien::erase(RGBMatrix *matrix) {
     int x = get_x();
     int y = get_y();
-    // Clear a generous area to cover movement + turret range
-    for (int dy = -6; dy <= 7; dy++) {
-        for (int dx = -7; dx <= 7; dx++) {
+    // Clear a generous area to cover taller sprite + movement
+    for (int dy = -8; dy <= 8; dy++) {
+        for (int dx = -6; dx <= 6; dx++) {
             int px = x + dx;
             int py = y + dy;
             if (px >= 0 && px < 64 && py >= 0 && py < 64) {
@@ -137,80 +141,95 @@ void MiniBossAlien::draw(RGBMatrix *matrix) {
     int ar = 30, ag = 90,  ab = 40;    // Armor
     int dr = 20, dg = 60,  db = 30;    // Dark edge
 
-    // Row -4: crown spike
-    sp(y - 4, x, ar, ag, ab);
+    // --- POINTY DAGGER SHAPE (5px wide, 13px tall) ---
+    // Row -6: top spike tip
+    sp(y - 6, x, dr, dg, db);
 
-    // Row -3: head
-    sp(y - 3, x - 1, dr, dg, db);
+    // Row -5: spike
+    sp(y - 5, x, ar, ag, ab);
+
+    // Row -4: narrow head (3px)
+    sp(y - 4, x - 1, dr, dg, db);
+    sp(y - 4, x,     br, bg, bb);
+    sp(y - 4, x + 1, dr, dg, db);
+
+    // Row -3: widening (3px)
+    sp(y - 3, x - 1, ar, ag, ab);
     sp(y - 3, x,     br, bg, bb);
-    sp(y - 3, x + 1, dr, dg, db);
+    sp(y - 3, x + 1, ar, ag, ab);
 
-    // Row -2: widening (7px)
-    for (int i = -3; i <= 3; i++) {
-        if (i >= -1 && i <= 1) sp(y - 2, x + i, br, bg, bb);
+    // Row -2: body (5px)
+    for (int i = -2; i <= 2; i++) {
+        if (i == 0) sp(y - 2, x + i, br, bg, bb);
         else sp(y - 2, x + i, ar, ag, ab);
     }
 
-    // Row -1: widest (9px)
-    for (int i = -4; i <= 4; i++) {
-        if (i >= -1 && i <= 1) sp(y - 1, x + i, br, bg, bb);
-        else if (i >= -3 && i <= 3) sp(y - 1, x + i, ar, ag, ab);
-        else sp(y - 1, x + i, dr, dg, db);
-    }
+    // Row -1: widest with wing tips (7px)
+    sp(y - 1, x - 3, dr, dg, db);
+    sp(y - 1, x - 2, ar, ag, ab);
+    sp(y - 1, x - 1, br, bg, bb);
+    sp(y - 1, x,     br, bg, bb);
+    sp(y - 1, x + 1, br, bg, bb);
+    sp(y - 1, x + 2, ar, ag, ab);
+    sp(y - 1, x + 3, dr, dg, db);
 
-    // Row 0: center with core eye (9px)
-    for (int i = -4; i <= 4; i++) {
-        if (i == 0) sp(y, x, cr, cg, cb);
-        else if (i >= -2 && i <= 2) sp(y, x + i, br, bg, bb);
-        else if (i >= -3 && i <= 3) sp(y, x + i, ar, ag, ab);
-        else sp(y, x + i, dr, dg, db);
-    }
+    // Row 0: core eye row (5px)
+    sp(y, x - 2, ar, ag, ab);
+    sp(y, x - 1, br, bg, bb);
+    sp(y, x,     cr, cg, cb);  // Core eye
+    sp(y, x + 1, br, bg, bb);
+    sp(y, x + 2, ar, ag, ab);
 
-    // Row +1: lower body (7px)
-    for (int i = -3; i <= 3; i++) {
-        if (i >= -1 && i <= 1) sp(y + 1, x + i, br, bg, bb);
+    // Row +1: narrowing (5px)
+    for (int i = -2; i <= 2; i++) {
+        if (i == 0) sp(y + 1, x + i, br, bg, bb);
         else sp(y + 1, x + i, ar, ag, ab);
     }
 
-    // Row +2: narrowing (5px)
-    for (int i = -2; i <= 2; i++) {
-        if (i == 0) sp(y + 2, x + i, br, bg, bb);
-        else sp(y + 2, x + i, ar, ag, ab);
-    }
+    // Row +2: narrow (3px)
+    sp(y + 2, x - 1, ar, ag, ab);
+    sp(y + 2, x,     br, bg, bb);
+    sp(y + 2, x + 1, ar, ag, ab);
 
-    // Turret is hidden — missiles fire from turret offset position
+    // Row +3: lower body (3px)
+    sp(y + 3, x - 1, dr, dg, db);
+    sp(y + 3, x,     ar, ag, ab);
+    sp(y + 3, x + 1, dr, dg, db);
 
-    // --- TRIANGULAR SIDE PROTRUSIONS ---
-    sp(y - 1, x - 5, cr, cg, cb);
-    sp(y,     x - 5, dr, dg, db);
-    sp(y - 1, x + 5, cr, cg, cb);
-    sp(y,     x + 5, dr, dg, db);
+    // Row +4: barrel
+    sp(y + 4, x, br, bg, bb);
+
+    // Row +5: gun tip
+    sp(y + 5, x, cr, cg, cb);
+
+    // Side spike protrusions at widest point
+    sp(y - 1, x - 4, cr, cg, cb);  // Left spike tip
+    sp(y - 1, x + 4, cr, cg, cb);  // Right spike tip
 
     // Ornament gems
-    sp(y - 2, x - 2, cr, cg, cb);
-    sp(y - 2, x + 2, cr, cg, cb);
+    sp(y - 2, x - 1, cr, cg, cb);
+    sp(y - 2, x + 1, cr, cg, cb);
 
     // --- FLICKERING PINK ENGINES (back/top) ---
     if ((frameCounter / 2) % 2 == 0) {
-        sp(y - 4, x - 2, 120, 30, 100);
-        sp(y - 4, x + 2, 120, 30, 100);
+        sp(y - 5, x - 1, 120, 30, 100);
+        sp(y - 5, x + 1, 120, 30, 100);
     } else {
-        sp(y - 4, x - 2, 45, 12, 38);
-        sp(y - 4, x + 2, 45, 12, 38);
+        sp(y - 5, x - 1, 45, 12, 38);
+        sp(y - 5, x + 1, 45, 12, 38);
     }
 
-    // Shield flash — conforms to front shape
+    // Shield flash — conforms to pointy front shape
     if (shieldFlash > 0 && shield > 0) {
         int sb = 80 + shieldFlash * 50;
         auto edge = [matrix, sb](int py, int px) {
             if (px >= 0 && px < 64 && py >= 0 && py < 64)
                 matrix->SetPixel(py, px, 30, 60, sb);
         };
-        // Follows bottom contour: widest at row +1, narrowing to gun
-        edge(y + 2, x - 4); edge(y + 2, x + 4);  // Side edges
-        for (int i = -3; i <= 3; i++) edge(y + 2, x + i);  // Row +2 base
-        edge(y + 3, x - 2); edge(y + 3, x - 1);
-        edge(y + 3, x + 1); edge(y + 3, x + 2);  // Narrowing
-        edge(y + 4, x);  // Gun tip
+        edge(y + 2, x - 2); edge(y + 2, x + 2);
+        edge(y + 3, x - 1); edge(y + 3, x + 1);
+        edge(y + 4, x - 1); edge(y + 4, x + 1);
+        edge(y + 5, x);
+        edge(y + 6, x);
     }
 }

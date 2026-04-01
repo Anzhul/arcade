@@ -1,12 +1,18 @@
 #include "bullet.hpp"
 
-Bullet::Bullet() : x(0), y(0), dx(0), dy(-1), r(255), g(0), b(0), active(false), isLarge(false), isRocket(false), isScatter(false), isHoming(false) {}
+Bullet::Bullet() : x(0), y(0), dx(0), dy(-1), r(255), g(0), b(0), active(false), isLarge(false), isRocket(false), isScatter(false), isHoming(false), isMissile(false), tickCount(0) {}
 
 Bullet::Bullet(int x, int y, int dx, int dy, int r, int g, int b)
-    : x(x), y(y), dx(dx), dy(dy), r(r), g(g), b(b), active(true), isLarge(false), isRocket(false), isScatter(false), isHoming(false) {}
+    : x(x), y(y), dx(dx), dy(dy), r(r), g(g), b(b), active(true), isLarge(false), isRocket(false), isScatter(false), isHoming(false), isMissile(false), tickCount(0) {}
 
 void Bullet::update() {
     if (!active) return;
+
+    tickCount++;
+
+    // Missiles move slowly — only advance every other frame
+    // Skip this if also homing, since homing logic already throttles movement
+    if (isMissile && !isHoming && tickCount % 2 != 0) return;
 
     x += dx;
     y += dy;

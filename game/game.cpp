@@ -1,9 +1,21 @@
 #include "game.hpp"
 #include "graphics.h"
 #include <cstdlib>
+#include <cstdio>
+#include <cstring>
 
 Game::Game() {
     lastSpawnTime = 0;
+    lastSpawnBasic = 0;
+    lastSpawnFast = 0;
+    lastSpawnTank = 0;
+    lastSpawnElite = 0;
+    lastSpawnLauncher = 0;
+    lastSpawnBeam = 0;
+    lastSpawnAnchoredElite = 0;
+    lastSpawnAnchoredEliteBeam = 0;
+    lastSpawnRocketBoss = 0;
+    lastSpawnMiniBoss = 0;
     currentLevel = 1;
     levelDisplayTimer = 0;
     levelStartDelay = 0;
@@ -19,8 +31,14 @@ Game::Game() {
     waveSpawnedFast = 0;
     waveSpawnedTank = 0;
     waveSpawnedElite = 0;
+    waveSpawnedLauncher = 0;
+    waveSpawnedBeam = 0;
+    waveSpawnedAnchoredElite = 0;
+    waveSpawnedAnchoredEliteBeam = 0;
+    waveSpawnedRocketBoss = 0;
     waveSpawnedMiniBoss = 0;
     allWavesComplete = false;
+    waveDelayTimer = 0;
 
     // Initialize enemy pointers
     for (int i = 0; i < MAX_ENEMIES; i++) {
@@ -28,56 +46,20 @@ Game::Game() {
     }
 
     // Initialize all level wave arrays to zero
-    //                         basic, fast, tank, elite, miniBoss, spawnRate
     for (int i = 0; i < MAX_LEVEL; i++) {
         levels[i].numWaves = 0;
         for (int j = 0; j < MAX_WAVES; j++) {
-            levels[i].waves[j] = {0, 0, 0, 0, 0, 15};
+            levels[i].waves[j] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
         }
     }
 
-    // Level 1: Introduction
-    levels[0].numWaves = 8;
-    levels[0].waves[0] = {50, 0, 0, 0, 0, 6};    // Wave 1: 50 basic
-    levels[0].waves[1] = {0, 10, 0, 0, 0, 3};    // Wave 2: 10 fast
-    levels[0].waves[2] = {50, 20, 0, 0, 0, 5};   // Wave 3: 50 basic + 20 fast
-    levels[0].waves[3] = {0, 10, 0, 0, 0, 3};    // Wave 4: 10 fast
-    levels[0].waves[4] = {30, 0, 0, 0, 0, 6};    // Wave 5: 30 basic
-    levels[0].waves[5] = {0, 10, 0, 0, 0, 3};    // Wave 6: 10 fast
-    levels[0].waves[6] = {20, 10, 0, 0, 0, 5};   // Wave 7: 20 basic + 10 fast
-    levels[0].waves[7] = {0, 0, 0, 0, 1, 15};    // Wave 8: mini-boss
-
-    // Level 2: Introducing tanks
-    levels[1].numWaves = 2;
-    levels[1].waves[0] = {10, 5, 2, 0, 0, 12};
-    levels[1].waves[1] = {8, 8, 3, 0, 0, 10};
-
-    // Level 3: Introducing elites
-    levels[2].numWaves = 3;
-    levels[2].waves[0] = {10, 5, 2, 0, 0, 12};
-    levels[2].waves[1] = {5, 5, 3, 2, 0, 10};
-    levels[2].waves[2] = {5, 8, 2, 3, 0, 8};
-
-    // Level 4: Tough
-    levels[3].numWaves = 3;
-    levels[3].waves[0] = {8, 10, 3, 2, 0, 10};
-    levels[3].waves[1] = {5, 5, 5, 5, 0, 8};
-    levels[3].waves[2] = {3, 10, 4, 5, 0, 7};
-
-    // Level 5: Final challenge
-    levels[4].numWaves = 4;
-    levels[4].waves[0] = {5, 10, 3, 3, 0, 10};
-    levels[4].waves[1] = {3, 5, 5, 5, 0, 8};
-    levels[4].waves[2] = {5, 10, 4, 6, 0, 7};
-    levels[4].waves[3] = {3, 8, 5, 8, 0, 6};
-
-    // Level 6: Boss fight
-    levels[5].numWaves = 1;
-    levels[5].waves[0] = {0, 0, 0, 0, 0, 999};
+    // Load levels from config file
+    loadLevels("levels.cfg");
 
     bossActive = false;
     bossSwarmSpawned = false;
     bossSwarmRemaining = 0;
+    playerDeathTimer = 0;
 }
 
 Game::~Game() {
@@ -88,6 +70,98 @@ Game::~Game() {
             enemies[i] = nullptr;
         }
     }
+}
+
+void Game::loadLevels(const char* filename) {
+    FILE* file = fopen(filename, "r");
+    if (!file) {
+        printf("Warning: Could not open %s, using empty levels\n", filename);
+        return;
+    }
+
+    char line[256];
+    int currentLevelIdx = -1;
+
+    while (fgets(line, sizeof(line), file)) {
+        // Strip newline
+        char* nl = strchr(line, '\n');
+        if (nl) *nl = '\0';
+
+        // Skip empty lines and comments
+        char* p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == '\0' || *p == '#') continue;
+
+        int levelNum;
+        int delayVal;
+
+        if (sscanf(p, "level %d", &levelNum) == 1) {
+            currentLevelIdx = levelNum - 1;
+            if (currentLevelIdx < 0 || currentLevelIdx >= MAX_LEVEL) {
+                printf("Warning: level %d out of range (1-%d), skipping\n", levelNum, MAX_LEVEL);
+                currentLevelIdx = -1;
+            }
+        } else if (sscanf(p, "delay %d", &delayVal) == 1) {
+            // Set delay on the NEXT wave to be added
+            if (currentLevelIdx >= 0) {
+                int w = levels[currentLevelIdx].numWaves;
+                if (w < MAX_WAVES) {
+                    // Store delay for the next wave (will be set when wave line is parsed)
+                    levels[currentLevelIdx].waves[w].delayBefore = delayVal;
+                }
+            }
+        } else if (strncmp(p, "wave", 4) == 0) {
+            // Named format: wave basic 20 fast 10 spawnrate 8
+            if (currentLevelIdx >= 0 && levels[currentLevelIdx].numWaves < MAX_WAVES) {
+                int w = levels[currentLevelIdx].numWaves;
+                Wave& wave = levels[currentLevelIdx].waves[w];
+                // Preserve delayBefore if set by a preceding "delay" line
+                int savedDelay = wave.delayBefore;
+                wave = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, savedDelay, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+
+                // Parse key-value pairs after "wave"
+                // Supports: type count OR type count:spawnrate
+                char* tok = p + 4;  // Skip "wave"
+                char key[32];
+                char valStr[32];
+                while (sscanf(tok, " %31s %31s", key, valStr) == 2) {
+                    // Parse value — may be "count" or "count:rate"
+                    int val = 0, typeRate = -1;
+                    char* colon = strchr(valStr, ':');
+                    if (colon) {
+                        *colon = '\0';
+                        val = atoi(valStr);
+                        typeRate = atoi(colon + 1);
+                    } else {
+                        val = atoi(valStr);
+                    }
+
+                    if (strcmp(key, "basic") == 0) { wave.basicCount = val; if (typeRate >= 0) wave.basicRate = typeRate; }
+                    else if (strcmp(key, "fast") == 0) { wave.fastCount = val; if (typeRate >= 0) wave.fastRate = typeRate; }
+                    else if (strcmp(key, "tank") == 0) { wave.tankCount = val; if (typeRate >= 0) wave.tankRate = typeRate; }
+                    else if (strcmp(key, "elite") == 0) { wave.eliteCount = val; if (typeRate >= 0) wave.eliteRate = typeRate; }
+                    else if (strcmp(key, "launcher") == 0) { wave.launcherCount = val; if (typeRate >= 0) wave.launcherRate = typeRate; }
+                    else if (strcmp(key, "beam") == 0) { wave.beamCount = val; if (typeRate >= 0) wave.beamRate = typeRate; }
+                    else if (strcmp(key, "anchorelite") == 0) { wave.anchoredEliteCount = val; if (typeRate >= 0) wave.anchoredEliteRate = typeRate; }
+                    else if (strcmp(key, "anchorelitebeam") == 0) { wave.anchoredEliteBeamCount = val; if (typeRate >= 0) wave.anchoredEliteBeamRate = typeRate; }
+                    else if (strcmp(key, "rocketboss") == 0) { wave.rocketBossCount = val; if (typeRate >= 0) wave.rocketBossRate = typeRate; }
+                    else if (strcmp(key, "miniboss") == 0) { wave.miniBossCount = val; if (typeRate >= 0) wave.miniBossRate = typeRate; }
+                    else if (strcmp(key, "spawnrate") == 0) wave.spawnRate = val;
+                    else if (strcmp(key, "delay") == 0) wave.delayBefore = val;
+
+                    // Advance past the key and value we just read
+                    while (*tok == ' ' || *tok == '\t') tok++;
+                    while (*tok && *tok != ' ' && *tok != '\t') tok++;  // skip key
+                    while (*tok == ' ' || *tok == '\t') tok++;
+                    while (*tok && *tok != ' ' && *tok != '\t') tok++;  // skip value
+                }
+                levels[currentLevelIdx].numWaves++;
+            }
+        }
+    }
+
+    fclose(file);
+    printf("Loaded %d levels from %s\n", currentLevelIdx + 1, filename);
 }
 
 void Game::setup() {
@@ -106,6 +180,16 @@ void Game::setup() {
         explosions[i].timer = 0;
     }
     lastSpawnTime = 0;
+    lastSpawnBasic = 0;
+    lastSpawnFast = 0;
+    lastSpawnTank = 0;
+    lastSpawnElite = 0;
+    lastSpawnLauncher = 0;
+    lastSpawnBeam = 0;
+    lastSpawnAnchoredElite = 0;
+    lastSpawnAnchoredEliteBeam = 0;
+    lastSpawnRocketBoss = 0;
+    lastSpawnMiniBoss = 0;
     currentLevel = 1;
     levelDisplayTimer = 100;  // Show "LEVEL 1" for 100 ticks at start
     gameState = MAIN_MENU;
@@ -119,11 +203,18 @@ void Game::setup() {
     waveSpawnedFast = 0;
     waveSpawnedTank = 0;
     waveSpawnedElite = 0;
+    waveSpawnedLauncher = 0;
+    waveSpawnedBeam = 0;
+    waveSpawnedAnchoredElite = 0;
+    waveSpawnedAnchoredEliteBeam = 0;
+    waveSpawnedRocketBoss = 0;
     waveSpawnedMiniBoss = 0;
     allWavesComplete = false;
+    waveDelayTimer = 0;
     bossActive = false;
     bossSwarmSpawned = false;
     bossSwarmRemaining = 0;
+    playerDeathTimer = 0;
 }
 
 void Game::update(const InputState& input, RGBMatrix *matrix, int clock) {
@@ -137,23 +228,14 @@ void Game::update(const InputState& input, RGBMatrix *matrix, int clock) {
         drawLevelSelectMenu(matrix);
         return;
     } else if (gameState == VICTORY || gameState == GAME_OVER) {
-        if (levelDisplayTimer > 0) {
-            // Clear screen but let player fly around
-            levelDisplayTimer--;
-            player.erase(matrix);
-            for (int ey = 0; ey < 64; ey++)
-                for (int ex = 0; ex < 64; ex++)
-                    matrix->SetPixel(ey, ex, 18, 10, 14);
-            // Move ship but don't fire
-            player.move(input.joystick_x, input.joystick_y, clock);
-            player.draw(matrix);
-            drawHUD(matrix, input.potentiometer);
-            return;
-        }
-
-        // Show text after idle
+        // Always draw the screen text
         if (gameState == VICTORY) drawVictoryScreen(matrix);
         else drawGameOverScreen(matrix);
+
+        if (levelDisplayTimer > 0) {
+            levelDisplayTimer--;
+            return;  // Brief input lockout
+        }
         // Require a fresh press of any button (must release first, then press)
         bool anyPressed = input.button1 || input.button2 || input.button3;
         bool anyWasPressed = lastButton1;  // reuse as "any button was held"
@@ -163,6 +245,58 @@ void Game::update(const InputState& input, RGBMatrix *matrix, int clock) {
             gameState = MAIN_MENU;
             lastButton1 = true;
             joystickDebounceTimer = 30;  // Prevent instant menu selection
+        }
+        return;
+    } else if (gameState == PLAYER_DYING) {
+        // Ship explosion sequence
+        playerDeathTimer++;
+        int px = player.get_x();
+        int py = player.get_y();
+
+        // Clear screen
+        for (int ey = 0; ey < 64; ey++)
+            for (int ex = 0; ex < 64; ex++)
+                matrix->SetPixel(ey, ex, 18, 10, 14);
+
+        // Spawn explosions around the ship position
+        if (playerDeathTimer < 40 && playerDeathTimer % 3 == 0) {
+            int ex = px + (rand() % 10) - 5;
+            int ey = py + (rand() % 10) - 5;
+            addExplosion(ex, ey);
+        }
+
+        // Draw explosions
+        updateExplosions();
+        drawExplosions(matrix);
+
+        // Draw disintegrating ship for first part
+        if (playerDeathTimer < 30) {
+            int dropout = playerDeathTimer * 3;  // Increasing pixel loss
+            auto sp = [matrix, dropout](int row, int col, int r, int g, int b) {
+                if (col >= 0 && col < 64 && row >= 0 && row < 64) {
+                    if ((rand() % 100) < dropout) return;
+                    matrix->SetPixel(row, col, r, g, b);
+                }
+            };
+            // Rough ship shape with color shifting to orange
+            int shift = playerDeathTimer * 6;
+            for (int dy = -2; dy <= 2; dy++) {
+                int hw = 2 - abs(dy);
+                for (int dx = -hw; dx <= hw; dx++) {
+                    int r = 100 + shift > 255 ? 255 : 100 + shift;
+                    int g = 150 > shift ? 150 - shift : 0;
+                    int b = 200 > shift ? 200 - shift : 0;
+                    sp(py + dy, px + dx, r, g, b);
+                }
+            }
+        }
+
+        drawHUD(matrix, 50);
+
+        // After explosions finish, go straight to game over text
+        if (playerDeathTimer > 60) {
+            gameState = GAME_OVER;
+            levelDisplayTimer = 5;  // Minimal input lockout
         }
         return;
     } else if (gameState != PLAYING) {
@@ -251,10 +385,12 @@ void Game::update(const InputState& input, RGBMatrix *matrix, int clock) {
     checkCollisions(clock);
     checkEnemyBulletCollisions();
 
-    // Check if player is dead
-    if (player.get_health() <= 0) {
-        gameState = GAME_OVER;
-        levelDisplayTimer = 100;  // Idle on empty screen then show text
+    // Check if player is dead — start death explosion
+    if (player.get_health() <= 0 && gameState != PLAYER_DYING) {
+        gameState = PLAYER_DYING;
+        playerDeathTimer = 0;
+        // Spawn initial explosion at player position
+        addExplosion(player.get_x(), player.get_y());
         return;
     }
 
@@ -354,11 +490,22 @@ void Game::spawnEnemy(int clock) {
 
     Wave& wave = level.waves[currentWave];
 
+    // Wait for wave delay if active
+    if (waveDelayTimer > 0) {
+        waveDelayTimer--;
+        return;
+    }
+
     // Check if current wave is fully spawned
     if (waveSpawnedBasic >= wave.basicCount &&
         waveSpawnedFast >= wave.fastCount &&
         waveSpawnedTank >= wave.tankCount &&
         waveSpawnedElite >= wave.eliteCount &&
+        waveSpawnedLauncher >= wave.launcherCount &&
+        waveSpawnedBeam >= wave.beamCount &&
+        waveSpawnedAnchoredElite >= wave.anchoredEliteCount &&
+        waveSpawnedAnchoredEliteBeam >= wave.anchoredEliteBeamCount &&
+        waveSpawnedRocketBoss >= wave.rocketBossCount &&
         waveSpawnedMiniBoss >= wave.miniBossCount) {
         // Wait for all enemies to clear before next wave
         bool anyAlive = false;
@@ -373,75 +520,122 @@ void Game::spawnEnemy(int clock) {
         waveSpawnedFast = 0;
         waveSpawnedTank = 0;
         waveSpawnedElite = 0;
+        waveSpawnedLauncher = 0;
+        waveSpawnedBeam = 0;
         waveSpawnedMiniBoss = 0;
         if (currentWave >= level.numWaves) {
             allWavesComplete = true;
+        } else {
+            // Apply delay before next wave if specified
+            waveDelayTimer = level.waves[currentWave].delayBefore;
         }
         return;
     }
 
-    // Spawn based on wave's spawn rate
-    if (clock - lastSpawnTime > wave.spawnRate) {
+    // Helper: get the effective spawn rate for a type (-1 means use default)
+    auto getRate = [&](int typeRate) -> int {
+        return (typeRate >= 0) ? typeRate : wave.spawnRate;
+    };
+
+    // Try to spawn each type independently on its own timer
+    struct SpawnEntry {
+        int remaining;      // How many left to spawn
+        int rate;           // Spawn rate for this type
+        int* lastTime;      // Per-type last spawn timer
+        int* spawnedCount;  // Counter to increment
+        AlienType type;
+        bool beamMode;      // For anchored elite beam variant
+    };
+
+    SpawnEntry entries[] = {
+        {wave.basicCount - waveSpawnedBasic, getRate(wave.basicRate), &lastSpawnBasic, &waveSpawnedBasic, BASIC, false},
+        {wave.fastCount - waveSpawnedFast, getRate(wave.fastRate), &lastSpawnFast, &waveSpawnedFast, FAST, false},
+        {wave.tankCount - waveSpawnedTank, getRate(wave.tankRate), &lastSpawnTank, &waveSpawnedTank, TANK, false},
+        {wave.eliteCount - waveSpawnedElite, getRate(wave.eliteRate), &lastSpawnElite, &waveSpawnedElite, ELITE, false},
+        {wave.launcherCount - waveSpawnedLauncher, getRate(wave.launcherRate), &lastSpawnLauncher, &waveSpawnedLauncher, LAUNCHER, false},
+        {wave.beamCount - waveSpawnedBeam, getRate(wave.beamRate), &lastSpawnBeam, &waveSpawnedBeam, BEAM, false},
+        {wave.anchoredEliteCount - waveSpawnedAnchoredElite, getRate(wave.anchoredEliteRate), &lastSpawnAnchoredElite, &waveSpawnedAnchoredElite, ANCHORED_ELITE, false},
+        {wave.anchoredEliteBeamCount - waveSpawnedAnchoredEliteBeam, getRate(wave.anchoredEliteBeamRate), &lastSpawnAnchoredEliteBeam, &waveSpawnedAnchoredEliteBeam, ANCHORED_ELITE, true},
+        {wave.rocketBossCount - waveSpawnedRocketBoss, getRate(wave.rocketBossRate), &lastSpawnRocketBoss, &waveSpawnedRocketBoss, ROCKET_BOSS, false},
+        {wave.miniBossCount - waveSpawnedMiniBoss, getRate(wave.miniBossRate), &lastSpawnMiniBoss, &waveSpawnedMiniBoss, MINI_BOSS, false},
+    };
+
+    for (auto& e : entries) {
+        if (e.remaining <= 0) continue;
+        if (clock - *e.lastTime <= e.rate) continue;
+
         // Find an empty slot
         for (int i = 0; i < MAX_ENEMIES; i++) {
-            if (enemies[i] == nullptr) {
-                int randomX = 10 + (rand() % 44);
-                int spawnY = -8;
+            if (enemies[i] != nullptr) continue;
 
-                // Select alien type from remaining wave quota
-                AlienType type = selectWaveAlienType();
+            int randomX = 10 + (rand() % 44);
+            int spawnY = -8;
 
-                // For tanks, ensure no overlap with existing tanks
-                if (type == TANK) {
-                    bool tooClose = true;
-                    int attempts = 0;
-                    while (tooClose && attempts < 10) {
-                        tooClose = false;
-                        for (int k = 0; k < MAX_ENEMIES; k++) {
-                            if (enemies[k] != nullptr && enemies[k]->getType() == TANK && enemies[k]->get_health() > 0) {
-                                int dx = randomX - enemies[k]->get_x();
-                                int dy = spawnY - enemies[k]->get_y();
-                                if (dx < 0) dx = -dx;
-                                if (dy < 0) dy = -dy;
-                                if (dx < 10 && dy < 10) {
-                                    tooClose = true;
-                                    randomX = 10 + (rand() % 44);
-                                    break;
-                                }
+            // For tanks, ensure no overlap with existing tanks
+            if (e.type == TANK) {
+                bool tooClose = true;
+                int attempts = 0;
+                while (tooClose && attempts < 10) {
+                    tooClose = false;
+                    for (int k = 0; k < MAX_ENEMIES; k++) {
+                        if (enemies[k] != nullptr && enemies[k]->getType() == TANK && enemies[k]->get_health() > 0) {
+                            int dx = randomX - enemies[k]->get_x();
+                            int dy = spawnY - enemies[k]->get_y();
+                            if (dx < 0) dx = -dx;
+                            if (dy < 0) dy = -dy;
+                            if (dx < 10 && dy < 10) {
+                                tooClose = true;
+                                randomX = 10 + (rand() % 44);
+                                break;
                             }
                         }
-                        attempts++;
                     }
-                    if (tooClose) break;
+                    attempts++;
                 }
-
-                // Create the appropriate alien and increment spawn counter
-                switch(type) {
-                    case BASIC:
-                        enemies[i] = new BasicAlien(randomX, spawnY);
-                        waveSpawnedBasic++;
-                        break;
-                    case FAST:
-                        enemies[i] = new FastAlien(randomX, spawnY);
-                        waveSpawnedFast++;
-                        break;
-                    case TANK:
-                        enemies[i] = new TankAlien(randomX, spawnY);
-                        waveSpawnedTank++;
-                        break;
-                    case ELITE:
-                        enemies[i] = new EliteAlien(randomX, spawnY);
-                        waveSpawnedElite++;
-                        break;
-                    case MINI_BOSS:
-                        enemies[i] = new MiniBossAlien(32, spawnY);  // Center spawn
-                        waveSpawnedMiniBoss++;
-                        break;
-                }
-
-                lastSpawnTime = clock;
-                break;
+                if (tooClose) break;
             }
+
+            // Create the alien
+            switch(e.type) {
+                case BASIC:
+                    enemies[i] = new BasicAlien(randomX, spawnY);
+                    break;
+                case FAST:
+                    enemies[i] = new FastAlien(randomX, spawnY);
+                    break;
+                case TANK:
+                    enemies[i] = new TankAlien(randomX, spawnY);
+                    break;
+                case ELITE:
+                    enemies[i] = new EliteAlien(randomX, spawnY);
+                    break;
+                case LAUNCHER:
+                    enemies[i] = new LauncherAlien(randomX, spawnY);
+                    break;
+                case BEAM:
+                    enemies[i] = new BeamAlien(randomX, spawnY);
+                    break;
+                case ANCHORED_ELITE: {
+                    AnchoredElite* ae = new AnchoredElite(randomX, spawnY);
+                    if (e.beamMode) ae->setBeamMode(true);
+                    enemies[i] = ae;
+                    break;
+                }
+                case ROCKET_BOSS:
+                    enemies[i] = new RocketBoss(randomX, spawnY);
+                    break;
+                case MINI_BOSS: {
+                    int mbPositions[] = {16, 32, 48};
+                    int mbX = mbPositions[*e.spawnedCount % 3];
+                    enemies[i] = new MiniBossAlien(mbX, spawnY - *e.spawnedCount * 3);
+                    break;
+                }
+                default: break;
+            }
+
+            (*e.spawnedCount)++;
+            *e.lastTime = clock;
+            break;
         }
     }
 }
@@ -487,6 +681,14 @@ void Game::updateEnemies(int clock) {
                 moveFrequency = 3;  // TANK enemies move every 3 frames
             } else if (enemies[i]->getType() == ELITE) {
                 moveFrequency = 2;  // ELITE enemies move every 2 frames
+            } else if (enemies[i]->getType() == LAUNCHER) {
+                moveFrequency = 3;  // LAUNCHER moves every 3 frames
+            } else if (enemies[i]->getType() == BEAM) {
+                moveFrequency = 4;  // BEAM moves slowly
+            } else if (enemies[i]->getType() == ANCHORED_ELITE) {
+                moveFrequency = 3;
+            } else if (enemies[i]->getType() == ROCKET_BOSS) {
+                moveFrequency = 2;
             } else if (enemies[i]->getType() == MINI_BOSS) {
                 moveFrequency = 3;
             } else if (enemies[i]->getType() == BOSS) {
@@ -501,6 +703,11 @@ void Game::updateEnemies(int clock) {
 
             if (clock % moveFrequency == 0) {
                 enemies[i]->move(0, 1);
+            }
+
+            // Launcher and beam stay on screen — anchored, never scroll off
+            if (enemies[i]->getType() == LAUNCHER || enemies[i]->getType() == BEAM || enemies[i]->getType() == ANCHORED_ELITE || enemies[i]->getType() == ROCKET_BOSS) {
+                continue;
             }
 
             // Boss never scrolls off — check for transition explosions
@@ -563,6 +770,7 @@ void Game::updateEnemies(int clock) {
             bossActive = false;
             bossSwarmSpawned = false;
             bossSwarmRemaining = 0;
+    playerDeathTimer = 0;
             allWavesComplete = true;
         }
 
@@ -858,23 +1066,34 @@ void Game::advanceLevel() {
     waveSpawnedFast = 0;
     waveSpawnedTank = 0;
     waveSpawnedElite = 0;
+    waveSpawnedLauncher = 0;
+    waveSpawnedBeam = 0;
+    waveSpawnedAnchoredElite = 0;
+    waveSpawnedAnchoredEliteBeam = 0;
+    waveSpawnedRocketBoss = 0;
     waveSpawnedMiniBoss = 0;
     allWavesComplete = false;
+    waveDelayTimer = 0;
     bossActive = false;
     bossSwarmSpawned = false;
     bossSwarmRemaining = 0;
+    playerDeathTimer = 0;
 
     levelDisplayTimer = 100;  // Show new level for 100 ticks
     levelStartDelay = 150;  // 1.5 second delay before starting
     levelActive = false;  // Stop spawning during delay
 
     // Immediately delete all enemies when advancing level
-    // It's safe now because we're setting a flag to avoid calling this during updateEnemies loop
     for (int i = 0; i < MAX_ENEMIES; i++) {
         if (enemies[i] != nullptr) {
             delete enemies[i];
             enemies[i] = nullptr;
         }
+    }
+
+    // Clear all enemy bullets
+    for (int i = 0; i < MAX_ENEMY_BULLETS; i++) {
+        enemyBullets[i].deactivate();
     }
 }
 
@@ -886,12 +1105,14 @@ AlienType Game::selectWaveAlienType() {
     Wave& wave = level.waves[currentWave];
 
     // Build list of types that still need spawning
-    AlienType available[5];
+    AlienType available[7];
     int count = 0;
     if (waveSpawnedBasic < wave.basicCount) available[count++] = BASIC;
     if (waveSpawnedFast < wave.fastCount) available[count++] = FAST;
     if (waveSpawnedTank < wave.tankCount) available[count++] = TANK;
     if (waveSpawnedElite < wave.eliteCount) available[count++] = ELITE;
+    if (waveSpawnedLauncher < wave.launcherCount) available[count++] = LAUNCHER;
+    if (waveSpawnedBeam < wave.beamCount) available[count++] = BEAM;
     if (waveSpawnedMiniBoss < wave.miniBossCount) available[count++] = MINI_BOSS;
 
     if (count == 0) return BASIC;  // Shouldn't happen
@@ -1297,21 +1518,165 @@ void Game::updateEnemyBullets() {
                 }
             }
         }
-        // Make mini-boss shoot homing missiles from turret
+        // Make anchored elites shoot or fire beams
+        if (enemies[i] != nullptr && enemies[i]->getType() == ANCHORED_ELITE && enemies[i]->get_health() > 0) {
+            AnchoredElite* ae = dynamic_cast<AnchoredElite*>(enemies[i]);
+            if (ae) {
+                if (ae->isBeamMode()) {
+                    ae->tickBeam();
+                    // Beam damage
+                    if (ae->isFiring()) {
+                        int bx = ae->getBeamX();
+                        int by = ae->get_y() + 3;
+                        if (px >= bx - 1 && px <= bx + 1 && py >= by) {
+                            player.takeDamage(1);
+                        }
+                    }
+                } else if (ae->shouldShoot()) {
+                    for (int j = 0; j < MAX_ENEMY_BULLETS; j++) {
+                        if (!enemyBullets[j].isActive()) {
+                            enemyBullets[j] = Bullet(ae->get_x(), ae->get_y() + 3, 0, 3, 140, 50, 160);
+                            ae->resetShotCooldown();
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        // Make rocket boss fire homing rockets or scatter
+        if (enemies[i] != nullptr && enemies[i]->getType() == ROCKET_BOSS && enemies[i]->get_health() > 0) {
+            RocketBoss* rb = dynamic_cast<RocketBoss*>(enemies[i]);
+            if (rb && rb->shouldShoot()) {
+                int rbx = rb->get_x();
+                int rby = rb->get_y();
+                if (rb->getAttackMode() == 0) {
+                    // Homing rockets
+                    if (rb->getPhase() == 2) {
+                        // Phase 2: fire from BOTH pods simultaneously
+                        int sides[2] = {-3, 3};
+                        for (int s = 0; s < 2; s++) {
+                            for (int j = 0; j < MAX_ENEMY_BULLETS; j++) {
+                                if (!enemyBullets[j].isActive()) {
+                                    int bulletDx = (px > rbx + sides[s]) ? 1 : (px < rbx + sides[s]) ? -1 : 0;
+                                    enemyBullets[j] = Bullet(rbx + sides[s], rby + 4, bulletDx, 1, 240, 70, 160);
+                                    enemyBullets[j].setMissile(true);
+                                    enemyBullets[j].setHoming(true);
+                                    break;
+                                }
+                            }
+                        }
+                    } else {
+                        // Phase 1: fire from one pod at a time
+                        int side = (rand() % 2 == 0) ? -3 : 3;
+                        for (int j = 0; j < MAX_ENEMY_BULLETS; j++) {
+                            if (!enemyBullets[j].isActive()) {
+                                int bulletDx = (px > rbx) ? 1 : (px < rbx) ? -1 : 0;
+                                enemyBullets[j] = Bullet(rbx + side, rby + 4, bulletDx, 1, 240, 70, 160);
+                                enemyBullets[j].setMissile(true);
+                                enemyBullets[j].setHoming(true);
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    // Scatter — 12 bullets in a wide fan
+                    int dirs[12][2] = {
+                        {0, 3},    // Fast center
+                        {0, 2},    // Slow center
+                        {-1, 3},   // Slight left fast
+                        {1, 3},    // Slight right fast
+                        {-1, 2},   // Slight left
+                        {1, 2},    // Slight right
+                        {-2, 2},   // Mid left
+                        {2, 2},    // Mid right
+                        {-2, 1},   // Wide left slow
+                        {2, 1},    // Wide right slow
+                        {-3, 1},   // Extra wide left
+                        {3, 1},    // Extra wide right
+                    };
+                    int spawned = 0;
+                    for (int j = 0; j < MAX_ENEMY_BULLETS && spawned < 12; j++) {
+                        if (!enemyBullets[j].isActive()) {
+                            enemyBullets[j] = Bullet(rbx, rby + 6, dirs[spawned][0], dirs[spawned][1], 200, 50, 40);
+                            enemyBullets[j].setScatter(true);
+                            spawned++;
+                        }
+                    }
+                }
+                rb->resetShotCooldown();
+            }
+        }
+        // Make launcher aliens fire slow blinking missiles
+        if (enemies[i] != nullptr && enemies[i]->getType() == LAUNCHER && enemies[i]->get_health() > 0) {
+            LauncherAlien* launcher = dynamic_cast<LauncherAlien*>(enemies[i]);
+            if (launcher && launcher->shouldShoot()) {
+                for (int j = 0; j < MAX_ENEMY_BULLETS; j++) {
+                    if (!enemyBullets[j].isActive()) {
+                        // Aimed slow missile toward player
+                        int lx = launcher->get_x();
+                        int ly = launcher->get_y() + 3;
+                        int bulletDx = (px > lx + 2) ? 1 : (px < lx - 2) ? -1 : 0;
+                        enemyBullets[j] = Bullet(lx, ly, bulletDx, 1, 240, 70, 160);
+                        enemyBullets[j].setMissile(true);
+                        enemyBullets[j].setHoming(true);
+                        launcher->resetShotCooldown();
+                        break;
+                    }
+                }
+            }
+        }
+        // Make beam aliens charge and fire
+        if (enemies[i] != nullptr && enemies[i]->getType() == BEAM && enemies[i]->get_health() > 0) {
+            BeamAlien* beam = dynamic_cast<BeamAlien*>(enemies[i]);
+            if (beam) {
+                beam->tickBeam();
+                // Only start charging once cooldown has elapsed
+                // (beamCooldown is decremented in move(), reaches 0 when ready)
+                // Beam damage — check if player is in the beam column
+                if (beam->isFiring()) {
+                    int bx = beam->getBeamX();
+                    int by = beam->get_y() + 3;
+                    if (px >= bx - 1 && px <= bx + 1 && py >= by) {
+                        player.takeDamage(1);  // Continuous damage each frame
+                    }
+                }
+            }
+        }
+        // Make mini-boss shoot from turret
         if (enemies[i] != nullptr && enemies[i]->getType() == MINI_BOSS && enemies[i]->get_health() > 0) {
             MiniBossAlien* mb = dynamic_cast<MiniBossAlien*>(enemies[i]);
             if (mb) {
-                // Update turret tracking toward player
                 mb->updateTurret(px);
 
                 if (mb->shouldShoot()) {
+                    // Count active mini-bosses
+                    int mbCount = 0;
+                    for (int k = 0; k < MAX_ENEMIES; k++) {
+                        if (enemies[k] != nullptr && enemies[k]->getType() == MINI_BOSS && enemies[k]->get_health() > 0)
+                            mbCount++;
+                    }
+
                     int turretX = mb->get_x() + mb->getTurretX();
+                    int fireY = mb->get_y() + 6;
                     for (int j = 0; j < MAX_ENEMY_BULLETS; j++) {
                         if (!enemyBullets[j].isActive()) {
-                            // Fire from turret tip position
-                            enemyBullets[j] = Bullet(turretX, mb->get_y() + 3, 0, 1, 200, 50, 80);
-                            enemyBullets[j].setHoming(true);
-                            mb->resetShotCooldown();
+                            if (mbCount >= 3) {
+                                // Tri-boss: aimed bullets
+                                int bulletDx = (px > turretX) ? 1 : (px < turretX) ? -1 : 0;
+                                enemyBullets[j] = Bullet(turretX, fireY, bulletDx, 2, 200, 50, 80);
+                            } else if (mbCount == 2) {
+                                // Two left: faster aimed bullets
+                                int bulletDx = (px > turretX) ? 1 : (px < turretX) ? -1 : 0;
+                                enemyBullets[j] = Bullet(turretX, fireY, bulletDx, 3, 220, 60, 90);
+                            } else {
+                                // Solo: slower fire rate but fast homing missile
+                                enemyBullets[j] = Bullet(turretX, fireY, 0, 3, 240, 40, 60);
+                                enemyBullets[j].setHoming(true);
+                            }
+                            // Scale fire rate by survivors
+                            if (mbCount >= 3) mb->setShotCooldown(30 + (rand() % 15));
+                            else if (mbCount == 2) mb->setShotCooldown(18 + (rand() % 10));
+                            else mb->setShotCooldown(40 + (rand() % 15));  // Solo: slower but deadly
                             break;
                         }
                     }
@@ -1416,6 +1781,27 @@ void Game::drawEnemyBullets(RGBMatrix *matrix) {
     for (int i = 0; i < MAX_ENEMY_BULLETS; i++) {
         if (enemyBullets[i].isActive()) {
             enemyBullets[i].draw(matrix);
+            // Launcher missiles: slow, blinking 2x2 with smoke trail
+            if (enemyBullets[i].getMissile()) {
+                int bx = enemyBullets[i].getX();
+                int by = enemyBullets[i].getY();
+                int tick = enemyBullets[i].getTick();
+                // Blink the missile body between bright pink and dim
+                bool bright = (tick / 4) % 2 == 0;
+                int mr = bright ? 240 : 90;
+                int mg = bright ? 70 : 25;
+                int mb = bright ? 160 : 60;
+                // Draw 2x1 missile body
+                if (bx >= 0 && bx < 64 && by >= 0 && by < 64)
+                    matrix->SetPixel(by, bx, mr, mg, mb);
+                if (bx + 1 >= 0 && bx + 1 < 64 && by >= 0 && by < 64)
+                    matrix->SetPixel(by, bx + 1, mr * 3 / 4, mg * 3 / 4, mb * 3 / 4);
+                // Smoke trail behind - pinkish
+                if (by - 1 >= 0 && by - 1 < 64 && bx >= 0 && bx < 64)
+                    matrix->SetPixel(by - 1, bx, 70, 25, 50);
+                if (by - 2 >= 0 && by - 2 < 64 && bx >= 0 && bx < 64)
+                    matrix->SetPixel(by - 2, bx, 40, 15, 30);
+            }
             // Homing missiles: 2px tall, 1px wide (trail pixel behind)
             if (enemyBullets[i].getHoming()) {
                 int bx = enemyBullets[i].getX();
@@ -1491,6 +1877,17 @@ void Game::eraseEnemyBullets(RGBMatrix *matrix) {
     for (int i = 0; i < MAX_ENEMY_BULLETS; i++) {
         if (enemyBullets[i].isActive()) {
             enemyBullets[i].erase(matrix);
+            // Erase launcher missile trail and extra pixel
+            if (enemyBullets[i].getMissile()) {
+                int bx = enemyBullets[i].getX();
+                int by = enemyBullets[i].getY();
+                if (bx + 1 >= 0 && bx + 1 < 64 && by >= 0 && by < 64)
+                    matrix->SetPixel(by, bx + 1, 18, 10, 14);
+                if (by - 1 >= 0 && by - 1 < 64 && bx >= 0 && bx < 64)
+                    matrix->SetPixel(by - 1, bx, 18, 10, 14);
+                if (by - 2 >= 0 && by - 2 < 64 && bx >= 0 && bx < 64)
+                    matrix->SetPixel(by - 2, bx, 18, 10, 14);
+            }
             // Erase homing trail pixel
             if (enemyBullets[i].getHoming()) {
                 int bx = enemyBullets[i].getX();

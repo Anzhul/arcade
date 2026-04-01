@@ -17,6 +17,7 @@ public:
     int getShield() const;
     bool shouldShoot();
     void resetShotCooldown();
+    void setShotCooldown(int cd);
     bool isEntryComplete() const;
     void updateTurret(int playerX);  // Track turret toward player
     int getTurretX() const;          // Turret offset from center

@@ -30,6 +30,9 @@ public:
 
     void setHoming(bool h) { isHoming = h; }
     bool getHoming() const { return isHoming; }
+    void setMissile(bool m) { isMissile = m; }
+    bool getMissile() const { return isMissile; }
+    int getTick() const { return tickCount; }
     void setDx(int newDx) { dx = newDx; }
     void setDy(int newDy) { dy = newDy; }
     int getDx() const { return dx; }
@@ -44,6 +47,8 @@ private:
     bool isRocket;  // Rocket (explodes on impact)
     bool isScatter; // Scatter shot bullet
     bool isHoming;  // Slow homing missile
+    bool isMissile; // Slow blinking launcher missile
+    int tickCount;  // Frame counter for blinking
 };
 
 #endif

@@ -19,7 +19,11 @@ enum AlienType {
     FAST,       // Yellow, 20 HP, moves faster
     TANK,       // Red, 60 HP, slower
     ELITE,      // Purple, 40 HP, medium speed
-    MINI_BOSS,  // Green, 150 HP + 50 shield, homing missile
+    LAUNCHER,   // Orange, 45 HP, stays on screen, launches slow blinking missiles
+    BEAM,            // Cyan, 50 HP, stays on screen, fires long-lasting beam
+    ANCHORED_ELITE,  // Purple, 60 HP + shield, stays on screen, shoots or fires beam
+    ROCKET_BOSS,     // Crimson, 200 HP + 60 shield, homing rockets + scatter
+    MINI_BOSS,       // Green, 150 HP + 50 shield, homing missile
     BOSS        // Boss, 600 HP + 200 shield, four phases
 };
 

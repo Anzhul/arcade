@@ -8,6 +8,10 @@
 #include "elite_alien.hpp"
 #include "boss_alien.hpp"
 #include "mini_boss_alien.hpp"
+#include "launcher_alien.hpp"
+#include "beam_alien.hpp"
+#include "anchored_elite.hpp"
+#include "rocket_boss.hpp"
 #include "led-matrix.h"
 #include "input.hpp"
 using namespace rgb_matrix;
@@ -30,8 +34,25 @@ struct Wave {
     int fastCount;
     int tankCount;
     int eliteCount;
+    int launcherCount;
+    int beamCount;
+    int anchoredEliteCount;      // Anchored elites (normal shooting)
+    int anchoredEliteBeamCount;  // Anchored elites (beam mode)
+    int rocketBossCount;
     int miniBossCount;
-    int spawnRate;  // Ticks between spawns
+    int spawnRate;        // Default ticks between spawns
+    int delayBefore;      // Ticks to wait before this wave starts (0 = no delay)
+    // Per-type spawn rates (-1 = use default spawnRate)
+    int basicRate;
+    int fastRate;
+    int tankRate;
+    int eliteRate;
+    int launcherRate;
+    int beamRate;
+    int anchoredEliteRate;
+    int anchoredEliteBeamRate;
+    int rocketBossRate;
+    int miniBossRate;
 };
 
 struct LevelConfig {
@@ -43,6 +64,7 @@ enum GameState {
     MAIN_MENU,
     LEVEL_SELECT,
     PLAYING,
+    PLAYER_DYING,
     PAUSED,
     VICTORY,
     GAME_OVER
@@ -67,6 +89,7 @@ private:
     void drawExplosions(RGBMatrix *matrix);
     void eraseExplosions(RGBMatrix *matrix);
     void advanceLevel();
+    void loadLevels(const char* filename);
     AlienType selectWaveAlienType();
     void updateEnemyBullets();
     void drawEnemyBullets(RGBMatrix *matrix);
@@ -82,12 +105,23 @@ private:
 
     Ship player;
     bool bossActive;
-    bool bossSwarmSpawned;    // Whether phase 3 swarm has been spawned
-    int bossSwarmRemaining;   // How many swarm aliens left to spawn
+    bool bossSwarmSpawned;
+    int bossSwarmRemaining;
+    int playerDeathTimer;     // Explosion sequence when player dies
     Alien* enemies[MAX_ENEMIES];
     Bullet enemyBullets[MAX_ENEMY_BULLETS];
     Explosion explosions[MAX_EXPLOSIONS];
     int lastSpawnTime;
+    int lastSpawnBasic;
+    int lastSpawnFast;
+    int lastSpawnTank;
+    int lastSpawnElite;
+    int lastSpawnLauncher;
+    int lastSpawnBeam;
+    int lastSpawnAnchoredElite;
+    int lastSpawnAnchoredEliteBeam;
+    int lastSpawnRocketBoss;
+    int lastSpawnMiniBoss;
     int lastLaserDamageTick[100];  // Track last damage tick for each enemy
     int currentLevel;
     int levelDisplayTimer;  // Timer for level display
@@ -101,8 +135,14 @@ private:
     int waveSpawnedFast;
     int waveSpawnedTank;
     int waveSpawnedElite;
+    int waveSpawnedLauncher;
+    int waveSpawnedBeam;
+    int waveSpawnedAnchoredElite;
+    int waveSpawnedAnchoredEliteBeam;
+    int waveSpawnedRocketBoss;
     int waveSpawnedMiniBoss;
     bool allWavesComplete;
+    int waveDelayTimer;       // Countdown timer for delay between waves
     GameState gameState;
     int menuSelection;  // 0=Play, 1=Level Select, 2=Quit
     int levelSelectChoice;  // Selected level (1-5)

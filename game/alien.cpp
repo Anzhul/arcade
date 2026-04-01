@@ -102,32 +102,104 @@ void Alien::draw(RGBMatrix *matrix) {
     if (x < 0 || x >= 64 || y < 0 || y > 70) return;
     
     if (dying) {
-        // Explosion effect - expanding and fading (bluish-green)
         int fade = 255 - (deathTimer * 17);  // Fade over 15 frames
-        int size = deathTimer / 5;  // Expand slower (was /3, now /5)
-        
-        // Helper lambda to safely set pixel
-        auto safeSetPixel = [matrix](int py, int px, int r, int g, int b) {
-            if (px >= 0 && px < 64 && py >= 0 && py < 64) {
+        int size = deathTimer / 5;
+
+        auto sp = [matrix](int py, int px, int r, int g, int b) {
+            if (px >= 0 && px < 64 && py >= 0 && py < 64)
                 matrix->SetPixel(py, px, r, g, b);
-            }
         };
-        
-        // Draw explosion particles - cyan/teal colors
-        safeSetPixel(y, x, 0, fade, fade);  // Center - cyan
-        if (size > 0) {
-            safeSetPixel(y - size, x, 0, fade / 2, fade);
-            safeSetPixel(y + size, x, 0, fade / 2, fade);
-            safeSetPixel(y, x - size, 0, fade / 2, fade);
-            safeSetPixel(y, x + size, 0, fade / 2, fade);
+
+        // Explosion colors and size based on alien type
+        int cr, cg, cb;   // Center color
+        int er, eg, eb;   // Edge color
+        int maxSize = 1;  // Explosion expand limit
+        switch(type) {
+            case BASIC:
+                cr = 0; cg = fade; cb = fade;             // Cyan
+                er = 0; eg = fade / 2; eb = fade;
+                maxSize = 1;
+                break;
+            case FAST:
+                cr = fade / 3; cg = fade / 2; cb = fade;  // Light blue
+                er = fade / 4; eg = fade / 3; eb = fade / 2;
+                maxSize = 1;
+                break;
+            case TANK:
+                cr = fade * 3 / 4; cg = 0; cb = fade;    // Purple
+                er = fade / 2; eg = 0; eb = fade / 2;
+                maxSize = 3;
+                break;
+            case ELITE:
+                cr = fade; cg = fade / 4; cb = fade / 2;  // Pink
+                er = fade / 2; eg = fade / 6; eb = fade / 3;
+                maxSize = 2;
+                break;
+            case LAUNCHER:
+                cr = fade; cg = fade * 2 / 3; cb = 0;     // Orange
+                er = fade / 2; eg = fade / 3; eb = 0;
+                maxSize = 2;
+                break;
+            case BEAM:
+                cr = fade / 3; cg = fade * 2 / 3; cb = fade;  // Cyan-blue
+                er = fade / 4; eg = fade / 2; eb = fade / 2;
+                maxSize = 2;
+                break;
+            case ANCHORED_ELITE:
+                cr = fade; cg = fade / 4; cb = fade / 2;      // Pink (same as elite)
+                er = fade / 2; eg = fade / 6; eb = fade / 3;
+                maxSize = 2;
+                break;
+            case ROCKET_BOSS:
+                cr = fade; cg = fade / 4; cb = 0;             // Orange-red
+                er = fade / 2; eg = fade / 5; eb = 0;
+                maxSize = 3;
+                break;
+            case MINI_BOSS:
+                cr = 0; cg = fade; cb = fade / 2;         // Green-cyan
+                er = 0; eg = fade / 2; eb = fade / 3;
+                maxSize = 3;
+                break;
+            default:
+                cr = 0; cg = fade; cb = fade;             // Cyan
+                er = 0; eg = fade / 2; eb = fade;
+                maxSize = 1;
+                break;
         }
-        
-        if (deathTimer < 8) {
-            // Draw diagonal particles in first half - lighter blue-green
-            safeSetPixel(y - 1, x - 1, 0, fade / 3, fade / 2);
-            safeSetPixel(y - 1, x + 1, 0, fade / 3, fade / 2);
-            safeSetPixel(y + 1, x - 1, 0, fade / 3, fade / 2);
-            safeSetPixel(y + 1, x + 1, 0, fade / 3, fade / 2);
+
+        if (size > maxSize) size = maxSize;
+
+        // Center
+        sp(y, x, cr, cg, cb);
+        // Cardinal expanding ring
+        if (size > 0) {
+            sp(y - size, x, er, eg, eb);
+            sp(y + size, x, er, eg, eb);
+            sp(y, x - size, er, eg, eb);
+            sp(y, x + size, er, eg, eb);
+        }
+        // Larger aliens get diagonal particles too
+        if (size > 1) {
+            sp(y - size, x - 1, er / 2, eg / 2, eb / 2);
+            sp(y - size, x + 1, er / 2, eg / 2, eb / 2);
+            sp(y + size, x - 1, er / 2, eg / 2, eb / 2);
+            sp(y + size, x + 1, er / 2, eg / 2, eb / 2);
+        }
+        // Extra ring for tanks/mini-bosses
+        if (maxSize >= 3 && deathTimer < 10) {
+            sp(y - 1, x - 1, er, eg, eb);
+            sp(y - 1, x + 1, er, eg, eb);
+            sp(y + 1, x - 1, er, eg, eb);
+            sp(y + 1, x + 1, er, eg, eb);
+            sp(y - 2, x, er / 2, eg / 2, eb / 2);
+            sp(y + 2, x, er / 2, eg / 2, eb / 2);
+            sp(y, x - 2, er / 2, eg / 2, eb / 2);
+            sp(y, x + 2, er / 2, eg / 2, eb / 2);
+        }
+        // Small diagonal flash for all types early on
+        if (deathTimer < 5) {
+            sp(y - 1, x - 1, er / 3, eg / 3, eb / 3);
+            sp(y + 1, x + 1, er / 3, eg / 3, eb / 3);
         }
         return;
     }
