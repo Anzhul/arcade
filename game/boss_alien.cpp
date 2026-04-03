@@ -1,9 +1,9 @@
 #include "boss_alien.hpp"
 #include <cstdlib>
 
-BossAlien::BossAlien() : Alien(600, 1, 32, -12, BOSS) {
+BossAlien::BossAlien() : Alien(800, 1, 32, -12, BOSS) {
     phase = 1;
-    maxHealth = 600;
+    maxHealth = 800;
     shield = 200;
     shieldFlash = 0;
     shotCooldown = 60;
@@ -23,9 +23,9 @@ BossAlien::BossAlien() : Alien(600, 1, 32, -12, BOSS) {
     beamChargeTimer = 0;
 }
 
-BossAlien::BossAlien(int x_in, int y_in) : Alien(600, 1, x_in, y_in, BOSS) {
+BossAlien::BossAlien(int x_in, int y_in) : Alien(800, 1, x_in, y_in, BOSS) {
     phase = 1;
-    maxHealth = 600;
+    maxHealth = 800;
     shield = 200;
     shieldFlash = 0;
     shotCooldown = 60;
@@ -221,7 +221,7 @@ void BossAlien::takeDamage(int damage) {
     if (hp > 0 && phase == 1 && shield <= 0) {
         phase = 2;
         phaseTransitionTimer = 30;
-    } else if (hp > 0 && hp <= 200 && phase == 2) {
+    } else if (hp > 0 && hp <= 350 && phase == 2) {
         phase = 3;           // Swarm phase - boss invulnerable
         phaseTransitionTimer = 0;
     }

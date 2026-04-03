@@ -4,7 +4,7 @@
 BeamAlien::BeamAlien() : Alien(50, 1, 32, -8, BEAM) {
     horizontalDirection = (rand() % 2) * 2 - 1;
     moveCounter = 0;
-    beamCooldown = 80 + (rand() % 40);
+    beamCooldown = 10 + (rand() % 10);
     chargeTimer = 0;
     beamTimer = 0;
     anchorY = 6 + (rand() % 8);  // Anchor near top: y=6-14
@@ -15,7 +15,7 @@ BeamAlien::BeamAlien() : Alien(50, 1, 32, -8, BEAM) {
 BeamAlien::BeamAlien(int x_in, int y_in) : Alien(50, 1, x_in, y_in, BEAM) {
     horizontalDirection = (rand() % 2) * 2 - 1;
     moveCounter = 0;
-    beamCooldown = 80 + (rand() % 40);
+    beamCooldown = 10 + (rand() % 10);
     chargeTimer = 0;
     beamTimer = 0;
     anchorY = 6 + (rand() % 8);

@@ -2,20 +2,80 @@
 #include <algorithm>  // for std::max, std::min
 
 TankAlien::TankAlien() : Alien(60, 1, 32, 5, TANK) {
-    // Ensure position is valid for tank size (extends 4px each direction)
     setX(std::max(4, std::min(59, get_x())));
     setY(std::max(4, std::min(59, get_y())));
     frameCounter = 0;
+    behaviorMode = 0;
+    horizontalDirection = (rand() % 2) * 2 - 1;
+    moveCounter = 0;
+    anchorY = 16 + (rand() % 10);  // Guard anchors at y=16-26
+    anchored = false;
 }
 
 TankAlien::TankAlien(int x_in, int y_in) : Alien(60, 1, x_in, y_in, TANK) {
-    // Ensure position is valid for tank size (extends 4px each direction)
     setX(std::max(4, std::min(59, x_in)));
     setY(std::max(4, std::min(59, y_in)));
     frameCounter = 0;
+    behaviorMode = 0;
+    horizontalDirection = (rand() % 2) * 2 - 1;
+    moveCounter = 0;
+    anchorY = 16 + (rand() % 10);
+    anchored = false;
 }
 
 TankAlien::~TankAlien() {
+}
+
+void TankAlien::move(int dx, int dy) {
+    moveCounter++;
+
+    int currentX = get_x();
+    if (currentX <= 6 || currentX >= 57) {
+        horizontalDirection *= -1;
+    }
+
+    if (behaviorMode == 0) {
+        // DEFAULT: straight down
+        Alien::move(0, dy);
+    } else if (behaviorMode == 1) {
+        // GUARD: move right with carousel wrap, descend until anchor then hold level
+        int descend = 0;
+        if (!anchored) {
+            if (get_y() < anchorY) {
+                descend = (moveCounter % 2 == 0) ? 1 : 0;
+            } else {
+                anchored = true;
+            }
+        }
+        Alien::move(1, descend);
+        // Wrap when fully off right side
+        if (get_x() - 4 > 63) {
+            setX(-8);
+        }
+    } else if (behaviorMode == 2) {
+        // PATROL: zigzag left-right while descending
+        if (moveCounter % 15 == 0) {
+            horizontalDirection *= -1;
+        }
+        Alien::move(horizontalDirection, dy);
+    } else if (behaviorMode == 3) {
+        // CAROUSEL: descend to anchor, then move right slowly descending, wrap around
+        if (!anchored) {
+            if (get_y() < anchorY) {
+                Alien::move(0, dy);
+            } else {
+                anchored = true;
+            }
+            return;
+        }
+        // Descent while moving right
+        int descend = (moveCounter % 2 == 0) ? 1 : 0;
+        Alien::move(1, descend);
+        // Wrap when right edge (x+4) is fully off the right side
+        if (get_x() - 4 > 63) {
+            setX(-8);  // Start fully off left side, right edge (x+4) at -4
+        }
+    }
 }
 
 void TankAlien::draw(RGBMatrix *matrix) {
@@ -24,8 +84,8 @@ void TankAlien::draw(RGBMatrix *matrix) {
     int x = get_x();
     int y = get_y();
     
-    // Bounds check - skip if completely off screen (allow partial at bottom)
-    if (x < 4 || x >= 60 || y < 4 || y > 70) return;
+    // Bounds check - skip if completely off screen (allow partial for carousel wrap)
+    if (x < -4 || x >= 68 || y < 4 || y > 70) return;
 
     if (get_health() == 0) {
         Alien::draw(matrix);

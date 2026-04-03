@@ -39,6 +39,7 @@ Game::Game() {
     waveSpawnedMiniBoss = 0;
     allWavesComplete = false;
     waveDelayTimer = 0;
+    waveTick = 0;
 
     // Initialize enemy pointers
     for (int i = 0; i < MAX_ENEMIES; i++) {
@@ -49,7 +50,16 @@ Game::Game() {
     for (int i = 0; i < MAX_LEVEL; i++) {
         levels[i].numWaves = 0;
         for (int j = 0; j < MAX_WAVES; j++) {
-            levels[i].waves[j] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+            levels[i].numCustomSpawns[j] = 0;
+        }
+        for (int j = 0; j < MAX_WAVES; j++) {
+            levels[i].waves[j] = {};
+            levels[i].waves[j].spawnRate = 15;
+            levels[i].waves[j].basicRate = -1; levels[i].waves[j].fastRate = -1;
+            levels[i].waves[j].tankRate = -1; levels[i].waves[j].eliteRate = -1;
+            levels[i].waves[j].launcherRate = -1; levels[i].waves[j].beamRate = -1;
+            levels[i].waves[j].anchoredEliteRate = -1; levels[i].waves[j].anchoredEliteBeamRate = -1;
+            levels[i].waves[j].rocketBossRate = -1; levels[i].waves[j].miniBossRate = -1;
         }
     }
 
@@ -110,50 +120,103 @@ void Game::loadLevels(const char* filename) {
                     levels[currentLevelIdx].waves[w].delayBefore = delayVal;
                 }
             }
+        } else if (strncmp(p, "spawn ", 6) == 0) {
+            // Custom spawn line: spawn <type> <x> <delay_ticks>
+            if (currentLevelIdx >= 0 && levels[currentLevelIdx].numWaves > 0) {
+                int w = levels[currentLevelIdx].numWaves - 1;
+                if (levels[currentLevelIdx].waves[w].isCustom &&
+                    levels[currentLevelIdx].numCustomSpawns[w] < MAX_CUSTOM_SPAWNS) {
+                    char typeName[32];
+                    int sx, sdelay;
+                    if (sscanf(p, "spawn %31s %d %d", typeName, &sx, &sdelay) == 3) {
+                        int idx = levels[currentLevelIdx].numCustomSpawns[w];
+                        CustomSpawn& cs = levels[currentLevelIdx].customSpawns[w][idx];
+                        cs.x = sx;
+                        cs.delayTicks = sdelay;
+                        cs.spawned = false;
+                        cs.beamMode = false;
+                        cs.eliteBehavior = 0;
+                        cs.tankBehavior = 0;
+
+                        if (strcmp(typeName, "basic") == 0) cs.type = BASIC;
+                        else if (strcmp(typeName, "fast") == 0) cs.type = FAST;
+                        else if (strcmp(typeName, "tank") == 0) cs.type = TANK;
+                        else if (strcmp(typeName, "tank_guard") == 0) { cs.type = TANK; cs.tankBehavior = 1; }
+                        else if (strcmp(typeName, "tank_patrol") == 0) { cs.type = TANK; cs.tankBehavior = 2; }
+                        else if (strcmp(typeName, "tank_carousel") == 0) { cs.type = TANK; cs.tankBehavior = 3; }
+                        else if (strcmp(typeName, "elite") == 0) cs.type = ELITE;
+                        else if (strcmp(typeName, "elite_straight") == 0) { cs.type = ELITE; cs.eliteBehavior = 1; }
+                        else if (strcmp(typeName, "elite_dodging") == 0) { cs.type = ELITE; cs.eliteBehavior = 2; }
+                        else if (strcmp(typeName, "launcher") == 0) cs.type = LAUNCHER;
+                        else if (strcmp(typeName, "beam") == 0) cs.type = BEAM;
+                        else if (strcmp(typeName, "anchorelite") == 0) cs.type = ANCHORED_ELITE;
+                        else if (strcmp(typeName, "anchorelitebeam") == 0) { cs.type = ANCHORED_ELITE; cs.beamMode = true; }
+                        else if (strcmp(typeName, "rocketboss") == 0) cs.type = ROCKET_BOSS;
+                        else if (strcmp(typeName, "miniboss") == 0) cs.type = MINI_BOSS;
+                        else { continue; }
+
+                        levels[currentLevelIdx].numCustomSpawns[w]++;
+                    }
+                }
+            }
         } else if (strncmp(p, "wave", 4) == 0) {
-            // Named format: wave basic 20 fast 10 spawnrate 8
             if (currentLevelIdx >= 0 && levels[currentLevelIdx].numWaves < MAX_WAVES) {
                 int w = levels[currentLevelIdx].numWaves;
                 Wave& wave = levels[currentLevelIdx].waves[w];
-                // Preserve delayBefore if set by a preceding "delay" line
                 int savedDelay = wave.delayBefore;
-                wave = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, savedDelay, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+                // 10 counts, isCustom, spawnRate, delayBefore, 10 rates = 23 fields
+                wave = {};  // Zero everything
+                wave.spawnRate = 15;
+                wave.delayBefore = savedDelay;
+                wave.basicRate = -1; wave.fastRate = -1; wave.tankRate = -1;
+                wave.eliteRate = -1; wave.launcherRate = -1; wave.beamRate = -1;
+                wave.anchoredEliteRate = -1; wave.anchoredEliteBeamRate = -1;
+                wave.rocketBossRate = -1; wave.miniBossRate = -1;
 
-                // Parse key-value pairs after "wave"
-                // Supports: type count OR type count:spawnrate
-                char* tok = p + 4;  // Skip "wave"
-                char key[32];
-                char valStr[32];
-                while (sscanf(tok, " %31s %31s", key, valStr) == 2) {
-                    // Parse value — may be "count" or "count:rate"
-                    int val = 0, typeRate = -1;
-                    char* colon = strchr(valStr, ':');
-                    if (colon) {
-                        *colon = '\0';
-                        val = atoi(valStr);
-                        typeRate = atoi(colon + 1);
-                    } else {
-                        val = atoi(valStr);
+                // Check for "wave custom"
+                char afterWave[32] = "";
+                sscanf(p + 4, " %31s", afterWave);
+
+                if (strcmp(afterWave, "custom") == 0) {
+                    wave.isCustom = true;
+                    int inlineDelay;
+                    if (sscanf(p, "wave custom delay %d", &inlineDelay) == 1) {
+                        wave.delayBefore = inlineDelay;
                     }
+                } else {
+                    // Named format: wave basic 20:8 fast 10:3
+                    char* tok = p + 4;
+                    char key[32];
+                    char valStr[32];
+                    while (sscanf(tok, " %31s %31s", key, valStr) == 2) {
+                        int val = 0, typeRate = -1;
+                        char* colon = strchr(valStr, ':');
+                        if (colon) {
+                            *colon = '\0';
+                            val = atoi(valStr);
+                            typeRate = atoi(colon + 1);
+                        } else {
+                            val = atoi(valStr);
+                        }
 
-                    if (strcmp(key, "basic") == 0) { wave.basicCount = val; if (typeRate >= 0) wave.basicRate = typeRate; }
-                    else if (strcmp(key, "fast") == 0) { wave.fastCount = val; if (typeRate >= 0) wave.fastRate = typeRate; }
-                    else if (strcmp(key, "tank") == 0) { wave.tankCount = val; if (typeRate >= 0) wave.tankRate = typeRate; }
-                    else if (strcmp(key, "elite") == 0) { wave.eliteCount = val; if (typeRate >= 0) wave.eliteRate = typeRate; }
-                    else if (strcmp(key, "launcher") == 0) { wave.launcherCount = val; if (typeRate >= 0) wave.launcherRate = typeRate; }
-                    else if (strcmp(key, "beam") == 0) { wave.beamCount = val; if (typeRate >= 0) wave.beamRate = typeRate; }
-                    else if (strcmp(key, "anchorelite") == 0) { wave.anchoredEliteCount = val; if (typeRate >= 0) wave.anchoredEliteRate = typeRate; }
-                    else if (strcmp(key, "anchorelitebeam") == 0) { wave.anchoredEliteBeamCount = val; if (typeRate >= 0) wave.anchoredEliteBeamRate = typeRate; }
-                    else if (strcmp(key, "rocketboss") == 0) { wave.rocketBossCount = val; if (typeRate >= 0) wave.rocketBossRate = typeRate; }
-                    else if (strcmp(key, "miniboss") == 0) { wave.miniBossCount = val; if (typeRate >= 0) wave.miniBossRate = typeRate; }
-                    else if (strcmp(key, "spawnrate") == 0) wave.spawnRate = val;
-                    else if (strcmp(key, "delay") == 0) wave.delayBefore = val;
+                        if (strcmp(key, "basic") == 0) { wave.basicCount = val; if (typeRate >= 0) wave.basicRate = typeRate; }
+                        else if (strcmp(key, "fast") == 0) { wave.fastCount = val; if (typeRate >= 0) wave.fastRate = typeRate; }
+                        else if (strcmp(key, "tank") == 0) { wave.tankCount = val; if (typeRate >= 0) wave.tankRate = typeRate; }
+                        else if (strcmp(key, "elite") == 0) { wave.eliteCount = val; if (typeRate >= 0) wave.eliteRate = typeRate; }
+                        else if (strcmp(key, "launcher") == 0) { wave.launcherCount = val; if (typeRate >= 0) wave.launcherRate = typeRate; }
+                        else if (strcmp(key, "beam") == 0) { wave.beamCount = val; if (typeRate >= 0) wave.beamRate = typeRate; }
+                        else if (strcmp(key, "anchorelite") == 0) { wave.anchoredEliteCount = val; if (typeRate >= 0) wave.anchoredEliteRate = typeRate; }
+                        else if (strcmp(key, "anchorelitebeam") == 0) { wave.anchoredEliteBeamCount = val; if (typeRate >= 0) wave.anchoredEliteBeamRate = typeRate; }
+                        else if (strcmp(key, "rocketboss") == 0) { wave.rocketBossCount = val; if (typeRate >= 0) wave.rocketBossRate = typeRate; }
+                        else if (strcmp(key, "miniboss") == 0) { wave.miniBossCount = val; if (typeRate >= 0) wave.miniBossRate = typeRate; }
+                        else if (strcmp(key, "spawnrate") == 0) wave.spawnRate = val;
+                        else if (strcmp(key, "delay") == 0) wave.delayBefore = val;
 
-                    // Advance past the key and value we just read
-                    while (*tok == ' ' || *tok == '\t') tok++;
-                    while (*tok && *tok != ' ' && *tok != '\t') tok++;  // skip key
-                    while (*tok == ' ' || *tok == '\t') tok++;
-                    while (*tok && *tok != ' ' && *tok != '\t') tok++;  // skip value
+                        while (*tok == ' ' || *tok == '\t') tok++;
+                        while (*tok && *tok != ' ' && *tok != '\t') tok++;
+                        while (*tok == ' ' || *tok == '\t') tok++;
+                        while (*tok && *tok != ' ' && *tok != '\t') tok++;
+                    }
                 }
                 levels[currentLevelIdx].numWaves++;
             }
@@ -211,10 +274,20 @@ void Game::setup() {
     waveSpawnedMiniBoss = 0;
     allWavesComplete = false;
     waveDelayTimer = 0;
+    waveTick = 0;
     bossActive = false;
     bossSwarmSpawned = false;
     bossSwarmRemaining = 0;
     playerDeathTimer = 0;
+
+    // Reset custom spawn flags for all levels
+    for (int l = 0; l < MAX_LEVEL; l++) {
+        for (int w = 0; w < levels[l].numWaves; w++) {
+            for (int s = 0; s < levels[l].numCustomSpawns[w]; s++) {
+                levels[l].customSpawns[w][s].spawned = false;
+            }
+        }
+    }
 }
 
 void Game::update(const InputState& input, RGBMatrix *matrix, int clock) {
@@ -496,6 +569,75 @@ void Game::spawnEnemy(int clock) {
         return;
     }
 
+    // Handle custom waves
+    if (wave.isCustom) {
+        waveTick++;
+        int numSpawns = level.numCustomSpawns[currentWave];
+        bool allSpawned = true;
+
+        for (int s = 0; s < numSpawns; s++) {
+            CustomSpawn& cs = level.customSpawns[currentWave][s];
+            if (cs.spawned) continue;
+            allSpawned = false;
+
+            if (waveTick >= cs.delayTicks) {
+                // Find empty slot and spawn
+                for (int i = 0; i < MAX_ENEMIES; i++) {
+                    if (enemies[i] != nullptr) continue;
+
+                    int spawnY = -8;
+                    switch (cs.type) {
+                        case BASIC: enemies[i] = new BasicAlien(cs.x, spawnY); break;
+                        case FAST: enemies[i] = new FastAlien(cs.x, spawnY); break;
+                        case TANK: {
+                            TankAlien* ta = new TankAlien(cs.x, spawnY);
+                            ta->setBehavior(cs.tankBehavior);
+                            enemies[i] = ta;
+                            break;
+                        }
+                        case ELITE: {
+                            EliteAlien* ea = new EliteAlien(cs.x, spawnY);
+                            ea->setBehavior(cs.eliteBehavior);
+                            enemies[i] = ea;
+                            break;
+                        }
+                        case LAUNCHER: enemies[i] = new LauncherAlien(cs.x, spawnY); break;
+                        case BEAM: enemies[i] = new BeamAlien(cs.x, spawnY); break;
+                        case ANCHORED_ELITE: {
+                            AnchoredElite* ae = new AnchoredElite(cs.x, spawnY);
+                            if (cs.beamMode) ae->setBeamMode(true);
+                            enemies[i] = ae;
+                            break;
+                        }
+                        case ROCKET_BOSS: enemies[i] = new RocketBoss(cs.x, spawnY); break;
+                        case MINI_BOSS: enemies[i] = new MiniBossAlien(cs.x, spawnY); break;
+                        default: break;
+                    }
+                    cs.spawned = true;
+                    break;
+                }
+            }
+        }
+
+        // Check if all custom spawns are done AND no enemies remain
+        if (allSpawned) {
+            bool anyAlive = false;
+            for (int i = 0; i < MAX_ENEMIES; i++) {
+                if (enemies[i] != nullptr) { anyAlive = true; break; }
+            }
+            if (!anyAlive) {
+                currentWave++;
+                waveTick = 0;
+                if (currentWave >= level.numWaves) {
+                    allWavesComplete = true;
+                } else {
+                    waveDelayTimer = level.waves[currentWave].delayBefore;
+                }
+            }
+        }
+        return;
+    }
+
     // Check if current wave is fully spawned
     if (waveSpawnedBasic >= wave.basicCount &&
         waveSpawnedFast >= wave.fastCount &&
@@ -706,6 +848,12 @@ void Game::updateEnemies(int clock) {
             }
 
             // Launcher and beam stay on screen — anchored, never scroll off
+            // Guard tanks stay on screen
+            if (enemies[i]->getType() == TANK) {
+                TankAlien* ta = dynamic_cast<TankAlien*>(enemies[i]);
+                // Guard tanks stay on screen, carousel tanks only stay until they scroll off bottom
+                if (ta && ta->getBehavior() == 1) continue;
+            }
             if (enemies[i]->getType() == LAUNCHER || enemies[i]->getType() == BEAM || enemies[i]->getType() == ANCHORED_ELITE || enemies[i]->getType() == ROCKET_BOSS) {
                 continue;
             }
@@ -787,6 +935,28 @@ void Game::updateEnemies(int clock) {
             }
         }
         return;
+    }
+
+    // Despawn guard tanks if no anchored aliens (launcher/beam/anchored_elite) remain
+    bool anyAnchored = false;
+    for (int i = 0; i < MAX_ENEMIES; i++) {
+        if (enemies[i] != nullptr && enemies[i]->get_health() > 0) {
+            AlienType t = enemies[i]->getType();
+            if (t == LAUNCHER || t == BEAM || t == ANCHORED_ELITE) {
+                anyAnchored = true;
+                break;
+            }
+        }
+    }
+    if (!anyAnchored) {
+        for (int i = 0; i < MAX_ENEMIES; i++) {
+            if (enemies[i] != nullptr && enemies[i]->getType() == TANK) {
+                TankAlien* ta = dynamic_cast<TankAlien*>(enemies[i]);
+                if (ta && ta->getBehavior() == 1) {
+                    enemies[i]->takeDamage(1000);  // Destroy guard tanks
+                }
+            }
+        }
     }
 
     // Level complete when all waves spawned and no enemies remain
@@ -963,6 +1133,14 @@ void Game::checkCollisions(int clock) {
             if (enemies[j]->getType() == BOSS) {
                 player.takeDamage(50);
                 enemies[j]->takeDamage(20);  // Boss takes some damage from collision
+            } else if (enemies[j]->getType() == ELITE) {
+                EliteAlien* ea = dynamic_cast<EliteAlien*>(enemies[j]);
+                if (ea && ea->isDashing()) {
+                    player.takeDamage(60);  // Dashing elite hits harder
+                } else {
+                    player.takeDamage(30);
+                }
+                enemies[j]->takeDamage(1000);
             } else {
                 player.takeDamage(30);
                 enemies[j]->takeDamage(1000);  // Instantly destroy regular enemies
@@ -1074,10 +1252,21 @@ void Game::advanceLevel() {
     waveSpawnedMiniBoss = 0;
     allWavesComplete = false;
     waveDelayTimer = 0;
+    waveTick = 0;
     bossActive = false;
     bossSwarmSpawned = false;
     bossSwarmRemaining = 0;
     playerDeathTimer = 0;
+
+    // Reset custom spawn flags for the new level
+    if (currentLevel >= 1 && currentLevel <= MAX_LEVEL) {
+        LevelConfig& lvl = levels[currentLevel - 1];
+        for (int w = 0; w < lvl.numWaves; w++) {
+            for (int s = 0; s < lvl.numCustomSpawns[w]; s++) {
+                lvl.customSpawns[w][s].spawned = false;
+            }
+        }
+    }
 
     levelDisplayTimer = 100;  // Show new level for 100 ticks
     levelStartDelay = 150;  // 1.5 second delay before starting
@@ -1658,28 +1847,29 @@ void Game::updateEnemyBullets() {
 
                     int turretX = mb->get_x() + mb->getTurretX();
                     int fireY = mb->get_y() + 6;
+                    // All modes fire aimed bullets, scaling fire rate by survivors
+                    int bulletDx = (px > turretX) ? 1 : (px < turretX) ? -1 : 0;
                     for (int j = 0; j < MAX_ENEMY_BULLETS; j++) {
                         if (!enemyBullets[j].isActive()) {
-                            if (mbCount >= 3) {
-                                // Tri-boss: aimed bullets
-                                int bulletDx = (px > turretX) ? 1 : (px < turretX) ? -1 : 0;
-                                enemyBullets[j] = Bullet(turretX, fireY, bulletDx, 2, 200, 50, 80);
-                            } else if (mbCount == 2) {
-                                // Two left: faster aimed bullets
-                                int bulletDx = (px > turretX) ? 1 : (px < turretX) ? -1 : 0;
-                                enemyBullets[j] = Bullet(turretX, fireY, bulletDx, 3, 220, 60, 90);
-                            } else {
-                                // Solo: slower fire rate but fast homing missile
-                                enemyBullets[j] = Bullet(turretX, fireY, 0, 3, 240, 40, 60);
-                                enemyBullets[j].setHoming(true);
-                            }
-                            // Scale fire rate by survivors
-                            if (mbCount >= 3) mb->setShotCooldown(30 + (rand() % 15));
-                            else if (mbCount == 2) mb->setShotCooldown(18 + (rand() % 10));
-                            else mb->setShotCooldown(40 + (rand() % 15));  // Solo: slower but deadly
+                            enemyBullets[j] = Bullet(turretX, fireY, bulletDx, 2, 200, 50, 80);
                             break;
                         }
                     }
+                    // Solo: also fire a homing missile alongside the aimed bullet
+                    if (mbCount == 1) {
+                        for (int j = 0; j < MAX_ENEMY_BULLETS; j++) {
+                            if (!enemyBullets[j].isActive()) {
+                                enemyBullets[j] = Bullet(turretX, fireY, 0, 1, 240, 70, 160);
+                                enemyBullets[j].setMissile(true);
+                                enemyBullets[j].setHoming(true);
+                                break;
+                            }
+                        }
+                    }
+                    // Scale fire rate by survivors — faster as fewer remain
+                    if (mbCount >= 3) mb->setShotCooldown(30 + (rand() % 15));
+                    else if (mbCount == 2) mb->setShotCooldown(14 + (rand() % 8));
+                    else mb->setShotCooldown(22 + (rand() % 12));  // Solo: fast aimed + homing
                 }
             }
         }

@@ -86,7 +86,7 @@ bool AnchoredElite::shouldShoot() {
 }
 
 void AnchoredElite::resetShotCooldown() {
-    shotCooldown = 25 + (rand() % 30);
+    shotCooldown = 12 + (rand() % 12);
 }
 
 void AnchoredElite::takeDamage(int damage) {

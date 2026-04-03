@@ -40,6 +40,7 @@ struct Wave {
     int anchoredEliteBeamCount;  // Anchored elites (beam mode)
     int rocketBossCount;
     int miniBossCount;
+    bool isCustom;        // Whether this is a custom spawn wave
     int spawnRate;        // Default ticks between spawns
     int delayBefore;      // Ticks to wait before this wave starts (0 = no delay)
     // Per-type spawn rates (-1 = use default spawnRate)
@@ -55,9 +56,24 @@ struct Wave {
     int miniBossRate;
 };
 
+const int MAX_CUSTOM_SPAWNS = 50;  // Per wave
+
+struct CustomSpawn {
+    AlienType type;
+    int x;            // X position
+    int delayTicks;   // Ticks after wave starts to spawn
+    bool beamMode;    // For anchored elite beam variant
+    int eliteBehavior; // 0=default, 1=straight, 2=dodging
+    int tankBehavior;  // 0=default, 1=guard, 2=patrol
+    bool spawned;     // Whether this spawn has been used
+};
+
 struct LevelConfig {
     Wave waves[MAX_WAVES];
     int numWaves;
+    // Custom spawn data for custom waves
+    CustomSpawn customSpawns[MAX_WAVES][MAX_CUSTOM_SPAWNS];
+    int numCustomSpawns[MAX_WAVES];  // How many custom spawns per wave
 };
 
 enum GameState {
@@ -143,6 +159,7 @@ private:
     int waveSpawnedMiniBoss;
     bool allWavesComplete;
     int waveDelayTimer;       // Countdown timer for delay between waves
+    int waveTick;             // Ticks since current wave started (for custom waves)
     GameState gameState;
     int menuSelection;  // 0=Play, 1=Level Select, 2=Quit
     int levelSelectChoice;  // Selected level (1-5)
