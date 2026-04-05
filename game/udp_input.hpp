@@ -90,8 +90,10 @@ private:
     bool running_;
     InputState lastState_ = {0, 0, 0, 0, false, false, false, false};  // Center joystick default
     int lockedRatio_ = 50;    // Locked shield/firerate ratio (0-100)
-    int lastLight_ = 0;       // Previous light reading for change detection
-    static constexpr int LIGHT_CHANGE_THRESHOLD = 500;  // Light change needed to lock ratio
+    int baselineLight_ = -1;  // Baseline light level (no hand present)
+    bool handPresent_ = false;
+    static constexpr int LIGHT_PRESENCE_THRESHOLD = 200;  // Light drop needed to detect hand presence
+    static constexpr int LIGHT_LOCK_THRESHOLD = 500;      // Sudden light change to lock ratio
 
     // Tilt configuration
     static constexpr float TILT_DEADZONE = 1.0f;    // Ignore tilts below this (m/s^2)
@@ -158,35 +160,55 @@ private:
             int b3 = parseJsonInt(buffer, "btn3");
             int b4 = parseJsonInt(buffer, "btn4");
 
-            // Convert tilt to joystick movement
+            // Convert tilt to joystick movement (inverted)
             // accelX controls left/right, accelY controls up/down
-            // Note: You may need to swap or invert axes depending on sensor orientation
-            state.joystick_x = tiltToJoystick(accelX);
-            state.joystick_y = tiltToJoystick(-accelY);  // Inverted for natural feel
+            state.joystick_x = tiltToJoystick(-accelX);  // Inverted
+            state.joystick_y = tiltToJoystick(accelY);   // Inverted
 
-            // Shield/firerate ratio: proximity sets it, sudden light change locks it
+            // Shield/firerate ratio: use light sensor as hand presence check
             // Map proximity (0-65535 raw -> 0-100)
             int currentProxRatio = (prox > 6553) ? 100 : (prox * 100 / 6553);
 
-            // Check for sudden light change to lock the ratio
-            int lightDelta = abs(light - lastLight_);
-            if (lightDelta > LIGHT_CHANGE_THRESHOLD) {
-                // Lock in the current proximity as the ratio
-                lockedRatio_ = currentProxRatio;
-                std::cout << "[INPUT] Ratio locked at " << lockedRatio_ << "% (light delta: " << lightDelta << ")" << std::endl;
+            // Establish baseline light level (when no hand is present)
+            if (baselineLight_ < 0) {
+                baselineLight_ = light;
+                std::cout << "[INPUT] Baseline light set to " << baselineLight_ << std::endl;
             }
-            lastLight_ = light;
+
+            // Detect hand presence by light drop (shadow)
+            bool wasHandPresent = handPresent_;
+            handPresent_ = (baselineLight_ - light) > LIGHT_PRESENCE_THRESHOLD;
+
+            // Update baseline slowly when no hand present (adapts to ambient light changes)
+            if (!handPresent_ && light > baselineLight_) {
+                baselineLight_ = light;
+            }
+
+            // Only update ratio when hand is present (casting shadow)
+            if (handPresent_) {
+                lockedRatio_ = currentProxRatio;
+            }
+
+            // Log hand presence changes
+            if (handPresent_ != wasHandPresent) {
+                if (handPresent_) {
+                    std::cout << "[INPUT] Hand detected (light: " << light << ", baseline: " << baselineLight_ << ")" << std::endl;
+                } else {
+                    std::cout << "[INPUT] Hand removed, ratio locked at " << lockedRatio_ << "%" << std::endl;
+                }
+            }
 
             // Use locked ratio as shield/firerate
             state.potentiometer = lockedRatio_;
 
-            // potentiometer2 shows current (unlocked) proximity for feedback
-            state.potentiometer2 = currentProxRatio;
+            // potentiometer2 shows current proximity (live feedback when hand present)
+            state.potentiometer2 = handPresent_ ? currentProxRatio : lockedRatio_;
 
-            state.button1 = (b1 != 0);
-            state.button2 = (b2 != 0);
-            state.button3 = (b3 != 0);
-            state.button4 = (b4 != 0);  // Weapon toggle
+            // Buttons inverted order (4->1, 3->2, 2->3, 1->4)
+            state.button1 = (b4 != 0);
+            state.button2 = (b3 != 0);
+            state.button3 = (b2 != 0);
+            state.button4 = (b1 != 0);  // Weapon toggle
 
             lastState_ = state;
         }
