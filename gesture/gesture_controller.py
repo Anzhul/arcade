@@ -4,14 +4,17 @@ Uses MediaPipe Hands to translate hand gestures into game inputs,
 then sends them over UDP in the same format as the Feather controller.
 
 Controls:
+  Left hand (virtual joystick):
+    - Thumb + index pinch       -> grab anchor point
+    - Drag while pinching       -> joystick_x / joystick_y (move ship)
+    - Release pinch             -> stop moving
   Right hand:
-    - Wrist X/Y position       -> joystick_x / joystick_y (move ship)
-    - Index finger up           -> button1  (fire)
-    - All fingers extended      -> button3  (special weapon)
+    - Thumb + index pinch       -> button2  (fire)
+    - Thumb + middle pinch      -> button1  (dash)
+    - Thumb + ring pinch        -> button3  (shield bubble)
   Left hand:
-    - Pinch (thumb+index close) -> button2  (dash / shield)
+    - Finger count (0-5)        -> pot2     (weapon mode)
     - Finger spread distance    -> pot1     (shield/firerate)
-    - Wrist tilt (hand angle)   -> pot2     (weapon mode)
 """
 
 import cv2
@@ -98,6 +101,12 @@ def main(show_preview: bool = True):
     print(f"Sending gestures -> udp://{GAME_IP}:{GAME_PORT}")
     print("Press Q to quit.")
 
+    # Virtual joystick state: anchor set on left-hand pinch start
+    anchor = None          # (x, y) in normalized coords, or None
+    DRAG_MAX = 0.15        # max drag distance (normalized) that maps to ±100
+    PINCH_GRAB = 0.05      # pinch threshold to enter drag mode
+    PINCH_RELEASE = 0.10   # must separate this far to exit drag mode
+
     with mp_hands.Hands(
         max_num_hands=2,
         min_detection_confidence=0.7,
@@ -137,27 +146,47 @@ def main(show_preview: bool = True):
                     right_lm = detected[0][0]
                     left_lm = detected[1][0]
 
-                # ── Right hand: movement + attack ─────────────────────────
-                if right_lm:
-                    wrist = right_lm[0]
-                    jx = map_range(wrist.x, 0.15, 0.85, -100, 100)
-                    jy = map_range(wrist.y, 0.1,  0.9,  -100, 100)
-
-                    b1 = finger_up(right_lm, 8, 6)              # fire
-                    b3 = count_fingers(right_lm) >= 5            # special
-
-                # ── Left hand: defense + analog controls ──────────────────
+                # ── Left hand: virtual joystick (pinch + drag) ─────────────
                 if left_lm:
                     pinch_dist = landmark_dist(left_lm[4], left_lm[8])
-                    b2 = pinch_dist < 0.05                       # dash/shield
+                    wrist = left_lm[0]
+                    if anchor is None:
+                        # Not dragging — need tight pinch to enter
+                        if pinch_dist < PINCH_GRAB:
+                            anchor = (wrist.x, wrist.y)
+                    else:
+                        # Already dragging — only release on clear separation
+                        if pinch_dist > PINCH_RELEASE:
+                            anchor = None
+                        else:
+                            dx = wrist.x - anchor[0]
+                            dy = wrist.y - anchor[1]
+                            jx = int(max(-100, min(100, (dx / DRAG_MAX) * 100)))
+                            jy = int(max(-100, min(100, (dy / DRAG_MAX) * 100)))
+                else:
+                    anchor = None
 
+                # ── Right hand: buttons (thumb-to-finger pinch) ───────────
+                PINCH_THRESH = 0.06
+                PINCH_TIGHT  = 0.04
+                if right_lm:
+                    if landmark_dist(right_lm[4], right_lm[8]) < PINCH_TIGHT:    # thumb + index = fire
+                        b2 = True
+                    if landmark_dist(right_lm[4], right_lm[12]) < PINCH_THRESH:  # thumb + middle = dash
+                        b1 = True
+                    if landmark_dist(right_lm[4], right_lm[16]) < PINCH_THRESH:  # thumb + ring = shield
+                        b3 = True
+
+                # ── Left hand: analog controls ────────────────────────────
+                if left_lm:
+                    # pot1: finger spread (shield vs fire rate)
                     spread = landmark_dist(left_lm[4], left_lm[20])
                     p1 = map_range(spread, 0.10, 0.55, 0, 100)
 
-                    dx = left_lm[8].x - left_lm[5].x
-                    dy = left_lm[8].y - left_lm[5].y
-                    angle = math.degrees(math.atan2(-dy, dx))
-                    p2 = map_range(angle, -90, 90, 0, 100)
+                    # pot2: finger count selects weapon mode
+                    # 0-1 fingers=normal, 2=scatter, 3=rocket, 4-5=laser
+                    fingers = count_fingers(left_lm)
+                    p2 = map_range(fingers, 0, 5, 0, 100)
 
                 # ── Draw both hands in preview ────────────────────────────
                 if show_preview:
@@ -167,11 +196,11 @@ def main(show_preview: bool = True):
                             mp_hands.HAND_CONNECTIONS,
                         )
 
+                    grab_status = "DRAG" if anchor is not None else "idle"
+                    left_fingers = count_fingers(left_lm) if left_lm else 0
                     for lm, is_right, tag in [
-                        (right_lm, True,
-                         f"RIGHT  fire={'ON' if b1 else 'off'}  spc={'ON' if b3 else 'off'}"),
-                        (left_lm, False,
-                         f"LEFT  dash={'ON' if b2 else 'off'}  p1={p1} p2={p2}"),
+                        (right_lm, True, "RIGHT  buttons"),
+                        (left_lm, False, f"LEFT  {grab_status}  fingers={left_fingers}  p1={p1}"),
                     ]:
                         if lm is None:
                             continue
