@@ -1,11 +1,14 @@
 
 #include <iostream>
+#include <cstring>
 #include <csignal>
+#include <time.h>
 #include "led-matrix.h"
 #include "graphics.h"
 #include "game.hpp"
 #include "input.hpp"
 #include "udp_input.hpp"
+#include "gamepad_input.hpp"
 #include <unistd.h>
 
 using namespace rgb_matrix;
@@ -58,33 +61,69 @@ void run_game(InputProvider& input)
   int clock = 0;
   InputState state = {0, 0, 0, false, false, false};  // Initialize to center
 
-  while (!interrupt_received && input.read(state)){
-    game.update(state, matrix, clock);
+  const long FRAME_TIME_NS = 33333333L;  // 33ms per frame = 30 FPS
+  struct timespec frameStart, frameEnd;
 
-    usleep(10000);  // 10ms per frame (~100 fps)
+  while (!interrupt_received && input.read(state)){
+    clock_gettime(CLOCK_MONOTONIC, &frameStart);
+
+    game.update(state, matrix, clock);
     ++clock;
+
+    // Sleep for the remainder of the frame
+    clock_gettime(CLOCK_MONOTONIC, &frameEnd);
+    long elapsed = (frameEnd.tv_sec - frameStart.tv_sec) * 1000000000L
+                 + (frameEnd.tv_nsec - frameStart.tv_nsec);
+    long remaining = FRAME_TIME_NS - elapsed;
+    if (remaining > 0) {
+        struct timespec sleepTime = {0, remaining};
+        nanosleep(&sleepTime, nullptr);
+    }
   }
 
   matrix->Clear();
   delete matrix;
 }
 
+void printUsage(const char* progName) {
+    std::cout << "Usage: " << progName << " [options]" << std::endl;
+    std::cout << "  --gamepad [device]   Use USB gamepad (default: /dev/input/js0)" << std::endl;
+    std::cout << "  --udp [port]         Use UDP input (default: port 8888)" << std::endl;
+    std::cout << "  (no args)            Default to UDP input on port 8888" << std::endl;
+}
+
 int main(int argc, char* argv[]) {
     signal(SIGINT, InterruptHandler);
     signal(SIGTERM, InterruptHandler);
 
-    int port = 8888;
-    if (argc > 1) {
-        port = atoi(argv[1]);
-    }
+    if (argc > 1 && strcmp(argv[1], "--gamepad") == 0) {
+        // Gamepad mode
+        const char* device = (argc > 2) ? argv[2] : nullptr;
+        GamepadInputProvider input(device);
+        if (!input.init()) {
+            return 1;
+        }
+        std::cout << "Starting game with USB gamepad..." << std::endl;
+        run_game(input);
+    } else {
+        // UDP mode (default)
+        int port = 8888;
+        if (argc > 1 && strcmp(argv[1], "--udp") == 0 && argc > 2) {
+            port = atoi(argv[2]);
+        } else if (argc > 1 && strcmp(argv[1], "--help") == 0) {
+            printUsage(argv[0]);
+            return 0;
+        } else if (argc > 1) {
+            port = atoi(argv[1]);
+        }
 
-    UdpInputProvider input(port);
-    if (!input.init()) {
-        return 1;
+        UdpInputProvider input(port);
+        if (!input.init()) {
+            return 1;
+        }
+        std::cout << "Starting game, waiting for controller input..." << std::endl;
+        run_game(input);
     }
-
-    std::cout << "Starting game, waiting for controller input..." << std::endl;
-    run_game(input);
 
     return 0;
 }

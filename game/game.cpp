@@ -1349,10 +1349,10 @@ void Game::updateMenu(const InputState& input) {
         if (joystickDebounceTimer == 0) {
             if (input.joystick_y < -50) {  // Up
                 menuSelection = (menuSelection - 1 + 3) % 3;
-                joystickDebounceTimer = 6;  // Prevent rapid changes
+                joystickDebounceTimer = 10;  // Prevent rapid changes
             } else if (input.joystick_y > 50) {  // Down
                 menuSelection = (menuSelection + 1) % 3;
-                joystickDebounceTimer = 6;  // Prevent rapid changes
+                joystickDebounceTimer = 10;  // Prevent rapid changes
             }
         }
         
@@ -1367,7 +1367,7 @@ void Game::updateMenu(const InputState& input) {
                 gameState = PLAYING;  // setup() resets to menu, so set again
             } else if (menuSelection == 1) {  // Level Select
                 gameState = LEVEL_SELECT;
-                joystickDebounceTimer = 8;  // Add debounce to prevent immediate selection
+                joystickDebounceTimer = 12;  // Add debounce to prevent immediate selection
             } else if (menuSelection == 2) {  // Quit
                 // Could handle quit - for now just return to menu
             }
@@ -1378,11 +1378,11 @@ void Game::updateMenu(const InputState& input) {
             if (input.joystick_y < -50) {  // Up
                 levelSelectChoice = (levelSelectChoice - 1);
                 if (levelSelectChoice < 0) levelSelectChoice = 0;
-                joystickDebounceTimer = 6;  // Prevent rapid changes
+                joystickDebounceTimer = 10;  // Prevent rapid changes
             } else if (input.joystick_y > 50) {  // Down
                 levelSelectChoice = (levelSelectChoice + 1);
                 if (levelSelectChoice > MAX_LEVEL + 1) levelSelectChoice = MAX_LEVEL + 1;  // +1 for BACK
-                joystickDebounceTimer = 6;  // Prevent rapid changes
+                joystickDebounceTimer = 10;  // Prevent rapid changes
             }
         }
         

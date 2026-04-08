@@ -29,10 +29,10 @@ public:
             return false;
         }
 
-        // Set socket to non-blocking with timeout
+        // Set socket to non-blocking with short timeout
         struct timeval tv;
         tv.tv_sec = 0;
-        tv.tv_usec = 50000;  // 50ms timeout
+        tv.tv_usec = 1000;  // 1ms timeout - don't block, engine controls frame rate
         setsockopt(sockfd_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
         struct sockaddr_in serverAddr;
