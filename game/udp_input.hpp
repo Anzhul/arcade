@@ -95,9 +95,16 @@ private:
     static constexpr int LIGHT_PRESENCE_THRESHOLD = 200;  // Light drop needed to detect hand presence
     static constexpr int LIGHT_LOCK_THRESHOLD = 500;      // Sudden light change to lock ratio
 
-    // Tilt configuration
-    static constexpr float TILT_DEADZONE = 1.0f;    // Ignore tilts below this (m/s^2)
-    static constexpr float TILT_MAX = 6.0f;         // Full tilt at this value (m/s^2)
+    // Tilt configuration with baseline calibration
+    static constexpr float TILT_DEADZONE = 0.5f;    // Ignore tilts below this (m/s^2) after baseline
+    static constexpr float TILT_MAX = 4.5f;         // Full tilt at this value (m/s^2) after baseline
+    float baselineAccelX_ = 0.0f;  // Rest-position tilt offset
+    float baselineAccelY_ = 0.0f;
+    int calibrationSamples_ = 0;
+    float calibrationSumX_ = 0.0f;
+    float calibrationSumY_ = 0.0f;
+    bool tiltCalibrated_ = false;
+    static constexpr int CALIBRATION_COUNT = 10;  // Average first 10 readings for baseline
 
     // Helper to find a float value in JSON by key
     float parseJsonFloat(const char* buffer, const char* key) {
@@ -160,10 +167,28 @@ private:
             int b3 = parseJsonInt(buffer, "btn3");
             int b4 = parseJsonInt(buffer, "btn4");
 
+            // Calibrate tilt baseline from first readings (rest position)
+            if (!tiltCalibrated_) {
+                calibrationSumX_ += accelX;
+                calibrationSumY_ += accelY;
+                calibrationSamples_++;
+                if (calibrationSamples_ >= CALIBRATION_COUNT) {
+                    baselineAccelX_ = calibrationSumX_ / CALIBRATION_COUNT;
+                    baselineAccelY_ = calibrationSumY_ / CALIBRATION_COUNT;
+                    tiltCalibrated_ = true;
+                    std::cout << "[INPUT] Tilt calibrated - baseline X: " << baselineAccelX_
+                              << ", Y: " << baselineAccelY_ << std::endl;
+                }
+            }
+
+            // Subtract baseline so rest position maps to zero
+            float relativeX = accelX - baselineAccelX_;
+            float relativeY = accelY - baselineAccelY_;
+
             // Convert tilt to joystick movement (inverted)
             // accelX controls left/right, accelY controls up/down
-            state.joystick_x = tiltToJoystick(-accelX);  // Inverted
-            state.joystick_y = tiltToJoystick(accelY);   // Inverted
+            state.joystick_x = tiltToJoystick(-relativeX);  // Inverted
+            state.joystick_y = tiltToJoystick(relativeY);   // Inverted
 
             // Shield/firerate ratio: use light sensor as hand presence check
             // Map proximity (0-65535 raw -> 0-100)

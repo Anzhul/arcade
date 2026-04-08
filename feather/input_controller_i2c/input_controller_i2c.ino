@@ -2,10 +2,10 @@
  * Adafruit Feather M0 WiFi (ATWINC1500) Input Controller with I2C Sensors
  *
  * Hardware Setup:
- * - Button 1: Connect to Digital Pin 5 (with pullup)
- * - Button 2: Connect to Digital Pin 6 (with pullup)
- * - Button 3: Connect to Digital Pin 9 (with pullup)
- * - Button 4: Connect to Digital Pin 10 (with pullup)
+ * - Button 1: Connect to Digital Pin 12 (with pullup)
+ * - Button 2: Connect to Digital Pin 11 (with pullup)
+ * - Button 3: Connect to Digital Pin 10 (with pullup)
+ * - Button 4: Connect to Digital Pin 9 (with pullup)
  *
  * I2C Sensors (connected via SDA/SCL - STEMMA QT compatible):
  * - VCNL4200: Long Distance IR Proximity and Ambient Light Sensor (I2C addr: 0x51)
@@ -101,6 +101,8 @@ const unsigned long STATUS_INTERVAL = 5000;  // Print status every 5 seconds
 
 unsigned long lastSendTime = 0;
 unsigned long lastStatusTime = 0;
+unsigned long lastTiltPrintTime = 0;
+const unsigned long TILT_PRINT_INTERVAL = 100;  // Print tilt data every 100ms
 unsigned long loopCount = 0;
 unsigned long udpPacketsSent = 0;
 unsigned long lastDebounceTime[4] = {0, 0, 0, 0};
@@ -165,6 +167,23 @@ void loop() {
       previousData = currentData;
     }
     lastSendTime = currentTime;
+  }
+
+  // Print tilt data every 100ms
+  if (lsm6dsoxFound && currentTime - lastTiltPrintTime >= TILT_PRINT_INTERVAL) {
+    Serial.print("[TILT] Accel: ");
+    Serial.print(currentData.accelX, 2);
+    Serial.print(", ");
+    Serial.print(currentData.accelY, 2);
+    Serial.print(", ");
+    Serial.print(currentData.accelZ, 2);
+    Serial.print(" | Gyro: ");
+    Serial.print(currentData.gyroX, 3);
+    Serial.print(", ");
+    Serial.print(currentData.gyroY, 3);
+    Serial.print(", ");
+    Serial.println(currentData.gyroZ, 3);
+    lastTiltPrintTime = currentTime;
   }
 
   // Print periodic status update
