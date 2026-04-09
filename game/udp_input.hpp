@@ -89,15 +89,14 @@ private:
     int sockfd_;
     bool running_;
     InputState lastState_ = {0, 0, 0, 0, false, false, false, false};  // Center joystick default
-    int lockedRatio_ = 50;    // Locked shield/firerate ratio (0-100)
-    int baselineLight_ = -1;  // Baseline light level (no hand present)
-    bool handPresent_ = false;
-    static constexpr int LIGHT_PRESENCE_THRESHOLD = 200;  // Light drop needed to detect hand presence
-    static constexpr int LIGHT_LOCK_THRESHOLD = 500;      // Sudden light change to lock ratio
+    bool lastButton1_ = false;
+    bool lastButton2_ = false;
+    bool lastButton3_ = false;
+    bool lastButton4_ = false;
 
     // Tilt configuration with baseline calibration
-    static constexpr float TILT_DEADZONE = 0.5f;    // Ignore tilts below this (m/s^2) after baseline
-    static constexpr float TILT_MAX = 4.5f;         // Full tilt at this value (m/s^2) after baseline
+    static constexpr float TILT_DEADZONE = 0.3f;    // Ignore tilts below this (m/s^2) after baseline
+    static constexpr float TILT_MAX = 2.5f;         // Full tilt at this value (m/s^2) after baseline
     float baselineAccelX_ = 0.0f;  // Rest-position tilt offset
     float baselineAccelY_ = 0.0f;
     int calibrationSamples_ = 0;
@@ -190,50 +189,26 @@ private:
             state.joystick_x = tiltToJoystick(-relativeX);  // Inverted
             state.joystick_y = tiltToJoystick(relativeY);   // Inverted
 
-            // Shield/firerate ratio: use light sensor as hand presence check
-            // Map proximity (0-65535 raw -> 0-100)
+            // Map proximity directly (0-65535 raw -> 0-100)
             int currentProxRatio = (prox > 6553) ? 100 : (prox * 100 / 6553);
-
-            // Establish baseline light level (when no hand is present)
-            if (baselineLight_ < 0) {
-                baselineLight_ = light;
-                std::cout << "[INPUT] Baseline light set to " << baselineLight_ << std::endl;
-            }
-
-            // Detect hand presence by light drop (shadow)
-            bool wasHandPresent = handPresent_;
-            handPresent_ = (baselineLight_ - light) > LIGHT_PRESENCE_THRESHOLD;
-
-            // Update baseline slowly when no hand present (adapts to ambient light changes)
-            if (!handPresent_ && light > baselineLight_) {
-                baselineLight_ = light;
-            }
-
-            // Only update ratio when hand is present (casting shadow)
-            if (handPresent_) {
-                lockedRatio_ = currentProxRatio;
-            }
-
-            // Log hand presence changes
-            if (handPresent_ != wasHandPresent) {
-                if (handPresent_) {
-                    std::cout << "[INPUT] Hand detected (light: " << light << ", baseline: " << baselineLight_ << ")" << std::endl;
-                } else {
-                    std::cout << "[INPUT] Hand removed, ratio locked at " << lockedRatio_ << "%" << std::endl;
-                }
-            }
-
-            // Use locked ratio as shield/firerate
-            state.potentiometer = lockedRatio_;
-
-            // potentiometer2 shows current proximity (live feedback when hand present)
-            state.potentiometer2 = handPresent_ ? currentProxRatio : lockedRatio_;
+            state.potentiometer = currentProxRatio;
+            state.potentiometer2 = currentProxRatio;
 
             // Buttons inverted order (4->1, 3->2, 2->3, 1->4)
             state.button1 = (b4 != 0);
             state.button2 = (b3 != 0);
             state.button3 = (b2 != 0);
             state.button4 = (b1 != 0);  // Weapon toggle
+
+            // Log button presses (only on rising edge)
+            if (state.button1 && !lastButton1_) std::cout << "[INPUT] Button 1 pressed" << std::endl;
+            if (state.button2 && !lastButton2_) std::cout << "[INPUT] Button 2 pressed" << std::endl;
+            if (state.button3 && !lastButton3_) std::cout << "[INPUT] Button 3 pressed" << std::endl;
+            if (state.button4 && !lastButton4_) std::cout << "[INPUT] Button 4 pressed" << std::endl;
+            lastButton1_ = state.button1;
+            lastButton2_ = state.button2;
+            lastButton3_ = state.button3;
+            lastButton4_ = state.button4;
 
             lastState_ = state;
         }
