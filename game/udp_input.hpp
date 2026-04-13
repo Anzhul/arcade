@@ -84,6 +84,17 @@ public:
         running_ = false;
     }
 
+    // Reset tilt baseline; next CALIBRATION_COUNT readings will re-establish rest position
+    void recalibrateTilt() {
+        baselineAccelX_ = 0.0f;
+        baselineAccelY_ = 0.0f;
+        calibrationSumX_ = 0.0f;
+        calibrationSumY_ = 0.0f;
+        calibrationSamples_ = 0;
+        tiltCalibrated_ = false;
+        std::cout << "[INPUT] Tilt baseline reset, recalibrating..." << std::endl;
+    }
+
 private:
     int port_;
     int sockfd_;
@@ -95,7 +106,7 @@ private:
     bool lastButton4_ = false;
 
     // Tilt configuration with baseline calibration
-    static constexpr float TILT_DEADZONE = 0.3f;    // Ignore tilts below this (m/s^2) after baseline
+    static constexpr float TILT_DEADZONE = 0.25f;   // Ignore tilts below this (m/s^2) after baseline
     static constexpr float TILT_MAX = 2.5f;         // Full tilt at this value (m/s^2) after baseline
     float baselineAccelX_ = 0.0f;  // Rest-position tilt offset
     float baselineAccelY_ = 0.0f;
