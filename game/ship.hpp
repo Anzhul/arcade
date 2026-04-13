@@ -47,6 +47,7 @@ public:
     virtual void takeDamage(int damage);
     virtual void fire(bool button1, bool button2, bool button3, int clock, RGBMatrix *matrix);
     virtual void updateWeaponMode(int pot2);
+    virtual void cycleWeapon();
     virtual void updateLaser(int clock, RGBMatrix *matrix);
     virtual void eraseLaser(RGBMatrix *matrix);
     virtual void move(int x, int y, int clock);

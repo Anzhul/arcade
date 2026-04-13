@@ -20,7 +20,7 @@ int main() {
     RGBMatrix::Options matrix_options;
     matrix_options.rows = 64;
     matrix_options.cols = 64;
-    matrix_options.chain_length = 1;
+
     matrix_options.parallel = 1;
     matrix_options.brightness = 75;
     matrix_options.hardware_mapping = "adafruit-hat";

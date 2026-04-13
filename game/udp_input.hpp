@@ -115,6 +115,7 @@ private:
     float calibrationSumY_ = 0.0f;
     bool tiltCalibrated_ = false;
     static constexpr int CALIBRATION_COUNT = 10;  // Average first 10 readings for baseline
+    int logCounter_ = 0;
 
     // Helper to find a float value in JSON by key
     float parseJsonFloat(const char* buffer, const char* key) {
@@ -205,17 +206,30 @@ private:
             state.potentiometer = currentProxRatio;
             state.potentiometer2 = currentProxRatio;
 
-            // Buttons inverted order (4->1, 3->2, 2->3, 1->4)
-            state.button1 = (b4 != 0);
-            state.button2 = (b3 != 0);
-            state.button3 = (b2 != 0);
-            state.button4 = (b1 != 0);  // Weapon toggle
+            // Direct button mapping: btn1=dash, btn2=fire, btn3=shield, btn4=weapon toggle
+            state.button1 = (b1 != 0);  // Dash
+            state.button2 = (b2 != 0);  // Fire
+            state.button3 = (b3 != 0);  // Shield
+            state.button4 = (b4 != 0);  // Weapon toggle
 
-            // Log button presses (only on rising edge)
-            if (state.button1 && !lastButton1_) std::cout << "[INPUT] Button 1 pressed" << std::endl;
-            if (state.button2 && !lastButton2_) std::cout << "[INPUT] Button 2 pressed" << std::endl;
-            if (state.button3 && !lastButton3_) std::cout << "[INPUT] Button 3 pressed" << std::endl;
-            if (state.button4 && !lastButton4_) std::cout << "[INPUT] Button 4 pressed" << std::endl;
+            // Log tilt pipeline every 25 packets (~500ms at 50Hz)
+            if (logCounter_++ % 25 == 0) {
+                std::cout << "[TILT] raw(" << accelX << "," << accelY << ")"
+                          << " rel(" << relativeX << "," << relativeY << ")"
+                          << " joy(" << state.joystick_x << "," << state.joystick_y << ")"
+                          << std::endl;
+            }
+
+            // Log button presses (only on rising edge) with action names
+            if (state.button1 && !lastButton1_) std::cout << "[BTN] 1 -> DASH" << std::endl;
+            if (state.button2 && !lastButton2_) std::cout << "[BTN] 2 -> FIRE" << std::endl;
+            if (state.button3 && !lastButton3_) std::cout << "[BTN] 3 -> SHIELD" << std::endl;
+            if (state.button4 && !lastButton4_) std::cout << "[BTN] 4 -> WEAPON TOGGLE" << std::endl;
+            // Log releases too so we can spot stuck buttons
+            if (!state.button1 && lastButton1_) std::cout << "[BTN] 1 released" << std::endl;
+            if (!state.button2 && lastButton2_) std::cout << "[BTN] 2 released" << std::endl;
+            if (!state.button3 && lastButton3_) std::cout << "[BTN] 3 released" << std::endl;
+            if (!state.button4 && lastButton4_) std::cout << "[BTN] 4 released" << std::endl;
             lastButton1_ = state.button1;
             lastButton2_ = state.button2;
             lastButton3_ = state.button3;

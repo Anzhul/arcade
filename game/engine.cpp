@@ -8,6 +8,7 @@
 #include "game.hpp"
 #include "input.hpp"
 #include "udp_input.hpp"
+#include "serial_input.hpp"
 #include "gamepad_input.hpp"
 #include <unistd.h>
 
@@ -87,9 +88,10 @@ void run_game(InputProvider& input)
 
 void printUsage(const char* progName) {
     std::cout << "Usage: " << progName << " [options]" << std::endl;
+    std::cout << "  --serial [device]    Use USB serial tilt controller (default: /dev/ttyACM0)" << std::endl;
     std::cout << "  --gamepad [device]   Use USB gamepad (default: /dev/input/js0)" << std::endl;
     std::cout << "  --udp [port]         Use UDP input (default: port 8888)" << std::endl;
-    std::cout << "  (no args)            Default to UDP input on port 8888" << std::endl;
+    std::cout << "  (no args)            Default to serial input on /dev/ttyACM0" << std::endl;
 }
 
 int main(int argc, char* argv[]) {
@@ -97,31 +99,28 @@ int main(int argc, char* argv[]) {
     signal(SIGTERM, InterruptHandler);
 
     if (argc > 1 && strcmp(argv[1], "--gamepad") == 0) {
-        // Gamepad mode
         const char* device = (argc > 2) ? argv[2] : nullptr;
         GamepadInputProvider input(device);
-        if (!input.init()) {
-            return 1;
-        }
+        if (!input.init()) return 1;
         std::cout << "Starting game with USB gamepad..." << std::endl;
         run_game(input);
-    } else {
-        // UDP mode (default)
-        int port = 8888;
-        if (argc > 1 && strcmp(argv[1], "--udp") == 0 && argc > 2) {
-            port = atoi(argv[2]);
-        } else if (argc > 1 && strcmp(argv[1], "--help") == 0) {
-            printUsage(argv[0]);
-            return 0;
-        } else if (argc > 1) {
-            port = atoi(argv[1]);
-        }
-
+    } else if (argc > 1 && strcmp(argv[1], "--udp") == 0) {
+        int port = (argc > 2) ? atoi(argv[2]) : 8888;
         UdpInputProvider input(port);
-        if (!input.init()) {
-            return 1;
-        }
-        std::cout << "Starting game, waiting for controller input..." << std::endl;
+        if (!input.init()) return 1;
+        std::cout << "Starting game with UDP input on port " << port << "..." << std::endl;
+        run_game(input);
+    } else if (argc > 1 && strcmp(argv[1], "--help") == 0) {
+        printUsage(argv[0]);
+        return 0;
+    } else {
+        // Default: USB serial tilt controller
+        const char* device = (argc > 2 && strcmp(argv[1], "--serial") == 0) ? argv[2]
+                           : (argc > 1  && strcmp(argv[1], "--serial") != 0) ? argv[1]
+                           : "/dev/ttyACM0";
+        SerialInputProvider input(device);
+        if (!input.init()) return 1;
+        std::cout << "Starting game with serial tilt controller on " << device << "..." << std::endl;
         run_game(input);
     }
 

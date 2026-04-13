@@ -5,3 +5,11 @@ sudo ./engine
 
 cd /home/anzhu/Desktop/Arcade/game && g++ -o engine engine.cpp game.cpp ship.cpp bullet.cpp alien.cpp basic_alien.cpp fast_alien.cpp tank_alien.cpp elite_alien.cpp boss_alien.cpp mini_boss_alien.cpp launcher_alien.cpp beam_alien.cpp anchored_elite.cpp rocket_boss.cpp -I/home/anzhu/rpi-rgb-led-matrix/include -L/home/anzhu/rpi-rgb-led-matrix/lib -lrgbmatrix -lrt -lm -lpthread 2>&1
 sudo ./engine --gamepad
+
+
+sudo ./engine              # uses /dev/ttyACM0
+sudo ./engine /dev/ttyACM0 # Feather M0 native USB
+sudo ./engine --udp        # old WiFi path still available
+
+cd /home/anzhu/Desktop/Arcade/game && g++ -o engine engine.cpp game.cpp ship.cpp bullet.cpp alien.cpp basic_alien.cpp fast_alien.cpp tank_alien.cpp elite_alien.cpp boss_alien.cpp mini_boss_alien.cpp launcher_alien.cpp beam_alien.cpp anchored_elite.cpp rocket_boss.cpp -I/home/anzhu/rpi-rgb-led-matrix/include -L/home/anzhu/rpi-rgb-led-matrix/lib -lrgbmatrix -lrt -lm -lpthread
+sudo ./engine /dev/ttyACM0

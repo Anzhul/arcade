@@ -164,6 +164,7 @@ private:
     int menuSelection;  // 0=Play, 1=Level Select, 2=Quit
     int levelSelectChoice;  // Selected level (1-5)
     bool lastButton1;  // For button press detection
+    bool lastButton4;  // For weapon toggle edge detection
     int lastJoystickY;  // For joystick debouncing
     int joystickDebounceTimer;  // Timer to prevent rapid menu changes
 };

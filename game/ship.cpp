@@ -297,6 +297,11 @@ void Ship::updateWeaponMode(int pot2)
     }
 }
 
+void Ship::cycleWeapon()
+{
+    weaponMode = (weaponMode + 1) % 4;
+}
+
 void Ship::updateLaser(int clock, RGBMatrix *matrix)
 {
     if (laserActive > 0 && (clock - laserStartTick) >= 30)

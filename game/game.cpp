@@ -24,6 +24,7 @@ Game::Game() {
     menuSelection = 0;
     levelSelectChoice = 1;
     lastButton1 = false;
+    lastButton4 = false;
     lastJoystickY = 0;
     joystickDebounceTimer = 0;
     currentWave = 0;
@@ -259,6 +260,7 @@ void Game::setup() {
     menuSelection = 0;
     levelSelectChoice = 1;
     lastButton1 = false;
+    lastButton4 = false;
     lastJoystickY = 0;
     joystickDebounceTimer = 0;
     currentWave = 0;
@@ -403,7 +405,8 @@ void Game::update(const InputState& input, RGBMatrix *matrix, int clock) {
         
         // Update ship stats based on potentiometer distribution
         player.updateDistribution(input.potentiometer);
-        player.updateWeaponMode(input.potentiometer2);
+        if (input.button4 && !lastButton4) player.cycleWeapon();
+        lastButton4 = input.button4;
         player.regenerateShield(clock);
         
         // Update positions
@@ -435,7 +438,8 @@ void Game::update(const InputState& input, RGBMatrix *matrix, int clock) {
 
     // Update ship stats based on potentiometer distribution
     player.updateDistribution(input.potentiometer);
-    player.updateWeaponMode(input.potentiometer2);
+    if (input.button4 && !lastButton4) player.cycleWeapon();
+    lastButton4 = input.button4;
     player.regenerateShield(clock);
 
     // Update positions
