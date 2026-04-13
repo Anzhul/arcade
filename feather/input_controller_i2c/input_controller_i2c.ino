@@ -1,5 +1,5 @@
 /*
- * Adafruit Feather M0 WiFi (ATWINC1500) Input Controller with I2C Sensors
+ * Adafruit Feather M0 Input Controller with I2C Sensors (USB Serial)
  *
  * Hardware Setup:
  * - Button 1: Connect to Digital Pin 12 (with pullup)
@@ -11,34 +11,19 @@
  * - VCNL4200: Long Distance IR Proximity and Ambient Light Sensor (I2C addr: 0x51)
  * - LSM6DSOX: 6-DoF IMU - Accelerometer + Gyroscope (I2C addr: 0x6A)
  *
- * Board: Adafruit Feather M0 WiFi (ATSAMD21 + ATWINC1500)
+ * Data is sent as newline-delimited JSON over USB Serial at 115200 baud.
+ *
+ * Board: Adafruit Feather M0 (ATSAMD21)
  *
  * Libraries Required:
- * - WiFi101 (for ATWINC1500)
  * - Adafruit_VCNL4200
  * - Adafruit_LSM6DS (includes LSM6DSOX support)
  * - Adafruit_Sensor
  */
 
-#include <WiFi101.h>
-#include <WiFiUdp.h>
 #include <Wire.h>
 #include <Adafruit_VCNL4200.h>
 #include <Adafruit_LSM6DSOX.h>
-
-// ===== WiFi Pin Configuration for M0 WiFi =====
-#define WINC_CS   8
-#define WINC_IRQ  7
-#define WINC_RST  4
-#define WINC_EN   2
-
-// ===== WiFi Configuration =====
-const char* ssid = "Ling";                         // Replace with your WiFi network name
-const char* password = "Lingfamily";               // Replace with your WiFi password
-const char* raspberryPiIP = "192.168.0.172";       // Replace with your Raspberry Pi's IP address
-const int udpPort = 8888;                          // UDP port for sending data
-
-WiFiUDP udp;
 
 // ===== I2C Sensor Objects =====
 Adafruit_VCNL4200 vcnl4200;
@@ -94,23 +79,16 @@ const float GYRO_THRESHOLD = 0.05;   // Minimum gyro change (rad/s)
 
 // ===== Debug/Logging Settings =====
 const bool DEBUG_BUTTONS = true;     // Log button state changes
-const bool DEBUG_VCNL4200 = true;    // Log proximity/light readings
-const bool DEBUG_LSM6DSOX = true;    // Log IMU readings
-const bool DEBUG_WIFI = true;        // Log WiFi status
 const unsigned long STATUS_INTERVAL = 5000;  // Print status every 5 seconds
 
 unsigned long lastSendTime = 0;
 unsigned long lastStatusTime = 0;
-unsigned long lastTiltPrintTime = 0;
-const unsigned long TILT_PRINT_INTERVAL = 100;  // Print tilt data every 100ms
-unsigned long loopCount = 0;
-unsigned long udpPacketsSent = 0;
 unsigned long lastDebounceTime[4] = {0, 0, 0, 0};
+unsigned long packetsSent = 0;
 bool lastButtonState[4] = {HIGH, HIGH, HIGH, HIGH};
 bool buttonState[4] = {HIGH, HIGH, HIGH, HIGH};
 
 // ===== Function Prototypes =====
-void setupWiFi();
 void setupI2CSensors();
 void scanI2CBus();
 void readSensors();
@@ -120,9 +98,9 @@ void printStatus();
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);
+  delay(100);  // Brief settle time after USB enumeration
 
-  Serial.println("\n=== Feather I2C Input Controller ===");
+  Serial.println("\n=== Feather I2C Input Controller (USB Serial) ===");
 
   // Configure button pins with internal pullup resistors
   pinMode(BUTTON1_PIN, INPUT_PULLUP);
@@ -144,18 +122,11 @@ void setup() {
   // Setup I2C sensors
   setupI2CSensors();
 
-  // Connect to WiFi
-  setupWiFi();
-
-  // Begin UDP
-  udp.begin(udpPort);
-
-  Serial.println("Setup complete. Starting to read sensors...\n");
+  Serial.println("Setup complete. Sending JSON over USB Serial...\n");
 }
 
 void loop() {
   unsigned long currentTime = millis();
-  loopCount++;
 
   // Read all sensors
   readSensors();
@@ -167,23 +138,6 @@ void loop() {
       previousData = currentData;
     }
     lastSendTime = currentTime;
-  }
-
-  // Print tilt data every 100ms
-  if (lsm6dsoxFound && currentTime - lastTiltPrintTime >= TILT_PRINT_INTERVAL) {
-    Serial.print("[TILT] Accel: ");
-    Serial.print(currentData.accelX, 2);
-    Serial.print(", ");
-    Serial.print(currentData.accelY, 2);
-    Serial.print(", ");
-    Serial.print(currentData.accelZ, 2);
-    Serial.print(" | Gyro: ");
-    Serial.print(currentData.gyroX, 3);
-    Serial.print(", ");
-    Serial.print(currentData.gyroY, 3);
-    Serial.print(", ");
-    Serial.println(currentData.gyroZ, 3);
-    lastTiltPrintTime = currentTime;
   }
 
   // Print periodic status update
@@ -286,61 +240,6 @@ void setupI2CSensors() {
     Serial.println("[LSM6DSOX] FAILED - Sensor not found! Check wiring.");
   }
 
-  Serial.println();
-}
-
-void setupWiFi() {
-  Serial.println("[WiFi] Setting up WiFi module...");
-
-  // Manually set WiFi pins for ATWINC1500
-  WiFi.setPins(WINC_CS, WINC_IRQ, WINC_RST, WINC_EN);
-  Serial.println("[WiFi] Pins configured (CS:8, IRQ:7, RST:4, EN:2)");
-
-  // Check for the WiFi module
-  if (WiFi.status() == WL_NO_SHIELD) {
-    Serial.println("[WiFi] ERROR: WiFi module not detected!");
-    Serial.println("[WiFi] Check that ATWINC1500 is properly connected.");
-    while (true); // Don't continue
-  }
-  Serial.println("[WiFi] Module detected!");
-
-  Serial.print("[WiFi] Connecting to SSID: ");
-  Serial.println(ssid);
-
-  // Connect to WPA/WPA2 network
-  int status = WL_IDLE_STATUS;
-  int attempts = 0;
-
-  while (status != WL_CONNECTED && attempts < 30) {
-    Serial.print("[WiFi] Attempt ");
-    Serial.print(attempts + 1);
-    Serial.print("/30...");
-    status = WiFi.begin(ssid, password);
-    delay(500);
-
-    if (status == WL_CONNECTED) {
-      Serial.println(" Connected!");
-    } else {
-      Serial.println(" Failed, retrying...");
-    }
-    attempts++;
-  }
-
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("[WiFi] === CONNECTION SUCCESSFUL ===");
-    Serial.print("[WiFi] IP Address: ");
-    Serial.println(WiFi.localIP());
-    Serial.print("[WiFi] Signal strength (RSSI): ");
-    Serial.print(WiFi.RSSI());
-    Serial.println(" dBm");
-    Serial.print("[WiFi] Target: ");
-    Serial.print(raspberryPiIP);
-    Serial.print(":");
-    Serial.println(udpPort);
-  } else {
-    Serial.println("[WiFi] === CONNECTION FAILED ===");
-    Serial.println("[WiFi] Check SSID and password.");
-  }
   Serial.println();
 }
 
@@ -466,20 +365,9 @@ void sendData() {
 
   jsonData += "}";
 
-  // Send UDP packet to Raspberry Pi
-  if (WiFi.status() == WL_CONNECTED) {
-    udp.beginPacket(raspberryPiIP, udpPort);
-    udp.print(jsonData);
-    udp.endPacket();
-    udpPacketsSent++;
-
-    // Debug output (comment out for better performance)
-    // Serial.println(jsonData);
-  } else {
-    if (DEBUG_WIFI) {
-      Serial.println("[WiFi] WARNING: Disconnected! Cannot send data.");
-    }
-  }
+  // Send JSON over USB Serial (newline-delimited for easy parsing)
+  Serial.println(jsonData);
+  packetsSent++;
 }
 
 void printStatus() {
@@ -510,5 +398,9 @@ void printStatus() {
   Serial.print(",");
   Serial.print(currentData.gyroY, 3);
   Serial.print(",");
-  Serial.println(currentData.gyroZ, 3);
+  Serial.print(currentData.gyroZ, 3);
+
+  // Packet count
+  Serial.print(" | Pkts: ");
+  Serial.println(packetsSent);
 }
