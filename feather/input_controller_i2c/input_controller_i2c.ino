@@ -70,12 +70,12 @@ bool vcnl4200Found = false;
 bool lsm6dsoxFound = false;
 
 // ===== Settings =====
-const int SEND_INTERVAL = 20;        // Send data every 20ms (50Hz)
+const int SEND_INTERVAL = 10;        // Send data every 10ms (100Hz)
 const int DEBOUNCE_DELAY = 50;       // Button debounce time in milliseconds
 const int PROX_THRESHOLD = 50;       // Minimum proximity change to trigger update
 const int LIGHT_THRESHOLD = 20;      // Minimum light change to trigger update
-const float ACCEL_THRESHOLD = 0.1;   // Minimum acceleration change (m/s^2)
-const float GYRO_THRESHOLD = 0.05;   // Minimum gyro change (rad/s)
+const float ACCEL_THRESHOLD = 0.02;  // Minimum acceleration change (m/s^2)
+const float GYRO_THRESHOLD = 0.01;   // Minimum gyro change (rad/s)
 
 // ===== Debug/Logging Settings =====
 const bool DEBUG_BUTTONS = true;     // Log button state changes
@@ -131,12 +131,9 @@ void loop() {
   // Read all sensors
   readSensors();
 
-  // Send data at regular intervals or when significant changes occur
+  // Send data at fixed interval
   if (currentTime - lastSendTime >= SEND_INTERVAL) {
-    if (dataChanged()) {
-      sendData();
-      previousData = currentData;
-    }
+    sendData();
     lastSendTime = currentTime;
   }
 
