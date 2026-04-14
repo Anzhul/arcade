@@ -145,6 +145,7 @@ private:
     bool tiltCalibrated_ = false;
     static constexpr int CALIBRATION_COUNT = 10;
     int logCounter_ = 0;
+    int lastProx_ = 0;
 
     float parseJsonFloat(const char* buffer, const char* key) {
         char searchKey[32];
@@ -208,33 +209,26 @@ private:
         state.joystick_x = tiltToJoystick(-relativeX);  // Inverted
         state.joystick_y = tiltToJoystick(relativeY);
 
-        int proxRatio = (prox > 6553) ? 100 : (prox * 100 / 6553);
+        // Noise filter: ignore sudden drops to near-zero (spurious spikes)
+        if (abs(prox - lastProx_) > 50 && prox < 50) {
+            prox = lastProx_;
+        }
+        lastProx_ = prox;
+
+        int proxRatio = (prox >= 4095) ? 100 : (prox * 100 / 4095);
         state.potentiometer  = proxRatio;
         state.potentiometer2 = proxRatio;
 
-        // Direct button mapping: btn1=dash, btn2=fire, btn3=shield, btn4=weapon toggle
-        state.button1 = (b1 != 0);
-        state.button2 = (b2 != 0);
-        state.button3 = (b3 != 0);
-        state.button4 = (b4 != 0);
+        // Button remapping: 4->1 (dash), 3->2 (fire), 2->3 (shield), 1->4 (weapon toggle)
+        state.button1 = (b4 != 0);
+        state.button2 = (b3 != 0);
+        state.button3 = (b2 != 0);
+        state.button4 = (b1 != 0);
 
-        // Log tilt pipeline every 25 packets (~500ms at 50Hz)
+        // Log proximity every 25 packets (~250ms at 100Hz)
         if (logCounter_++ % 25 == 0) {
-            std::cout << "[TILT] raw(" << accelX << "," << accelY << ")"
-                      << " rel(" << relativeX << "," << relativeY << ")"
-                      << " joy(" << state.joystick_x << "," << state.joystick_y << ")"
-                      << std::endl;
+            std::cout << "[PROX] " << prox << " -> " << proxRatio << "%" << std::endl;
         }
-
-        // Log button events with action names
-        if (state.button1 && !lastButton1_) std::cout << "[BTN] 1 -> DASH" << std::endl;
-        if (state.button2 && !lastButton2_) std::cout << "[BTN] 2 -> FIRE" << std::endl;
-        if (state.button3 && !lastButton3_) std::cout << "[BTN] 3 -> SHIELD" << std::endl;
-        if (state.button4 && !lastButton4_) std::cout << "[BTN] 4 -> WEAPON TOGGLE" << std::endl;
-        if (!state.button1 && lastButton1_) std::cout << "[BTN] 1 released" << std::endl;
-        if (!state.button2 && lastButton2_) std::cout << "[BTN] 2 released" << std::endl;
-        if (!state.button3 && lastButton3_) std::cout << "[BTN] 3 released" << std::endl;
-        if (!state.button4 && lastButton4_) std::cout << "[BTN] 4 released" << std::endl;
         lastButton1_ = state.button1;
         lastButton2_ = state.button2;
         lastButton3_ = state.button3;
