@@ -68,23 +68,41 @@ public:
     bool read(InputState& state) override {
         if (fd_ < 0) return false;
 
-        // Read available bytes into line buffer
-        char chunk[128];
-        ssize_t n = ::read(fd_, chunk, sizeof(chunk));
-        if (n > 0) {
+        // Drain the entire serial buffer each frame so we never miss a short button press.
+        // Joystick/proximity: last packet wins.
+        // Buttons: latched — if pressed in any packet since last frame, stays pressed.
+        bool gotAny = false;
+        bool latchBtn1 = false, latchBtn2 = false, latchBtn3 = false, latchBtn4 = false;
+
+        char chunk[256];
+        ssize_t n;
+        while ((n = ::read(fd_, chunk, sizeof(chunk))) > 0) {
+            gotAny = true;
             for (ssize_t i = 0; i < n; i++) {
                 char c = chunk[i];
                 if (c == '\n') {
                     lineBuf_[lineLen_] = '\0';
-                    // Only parse lines that look like JSON (start with '{')
                     if (lineLen_ > 0 && lineBuf_[0] == '{') {
                         parseInput(lineBuf_, state);
+                        // Accumulate button presses across all packets this frame
+                        latchBtn1 |= state.button1;
+                        latchBtn2 |= state.button2;
+                        latchBtn3 |= state.button3;
+                        latchBtn4 |= state.button4;
                     }
                     lineLen_ = 0;
                 } else if (c != '\r' && lineLen_ < (int)sizeof(lineBuf_) - 1) {
                     lineBuf_[lineLen_++] = c;
                 }
             }
+        }
+
+        if (gotAny) {
+            // Apply latched buttons on top of the latest joystick/proximity state
+            state.button1 = latchBtn1;
+            state.button2 = latchBtn2;
+            state.button3 = latchBtn3;
+            state.button4 = latchBtn4;
         } else {
             // No new data — hold last known state
             state = lastState_;
