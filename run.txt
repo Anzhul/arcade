@@ -1,0 +1,5 @@
+g++ -o pi/pi_receiver pi/pi_receiver.cpp && ./pi/pi_receiver
+
+python gesture/gesture_controller.py 
+
+python gesture/gesture_controller.py --ip 192.168.0.172
